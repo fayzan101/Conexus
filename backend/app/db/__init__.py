@@ -1,12 +1,17 @@
 from app.db.models import (  # noqa: F401
     ChatMessage,
     ChatSession,
+    ConnectorAccount,
     Decision,
+    DecisionLink,
     Document,
     DocumentChunk,
+    ExpertiseSignal,
     IngestJob,
+    KnowledgeScore,
     Meeting,
     Project,
     QueryLog,
+    TimelineEvent,
     User,
 )

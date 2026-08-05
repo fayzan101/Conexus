@@ -6,14 +6,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     auth,
     chat,
+    connectors,
     decisions,
     documents,
     graph,
     health,
+    intelligence,
     meetings,
     metrics,
     projects,
     search,
+    timeline,
     users,
 )
 from app.bootstrap import seed_dev_users
@@ -62,6 +65,9 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     app.include_router(chat.router)
     app.include_router(graph.router)
     app.include_router(decisions.router)
+    app.include_router(connectors.router)
+    app.include_router(timeline.router)
+    app.include_router(intelligence.router)
     app.include_router(metrics.router)
     return app
 

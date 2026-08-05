@@ -9,12 +9,13 @@ type Hit = {
   id: string;
   score: number;
   snippet: string;
-  source: { title?: string; type?: string };
+  source: { title?: string; type?: string; retrieval?: string };
 };
 
 export default function SearchPage() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<"semantic" | "hybrid">("hybrid");
   const [results, setResults] = useState<Hit[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +29,7 @@ export default function SearchPage() {
     try {
       const data = await api<{ results: Hit[] }>("/v1/search", {
         method: "POST",
-        body: JSON.stringify({ query, limit: 10 }),
+        body: JSON.stringify({ query, limit: 10, mode }),
       });
       setResults(data.results);
     } catch (err) {
@@ -39,14 +40,22 @@ export default function SearchPage() {
   return (
     <AppShell>
       <h1 className="font-display text-3xl">Enterprise Search</h1>
-      <p className="mt-1 text-ink-700">Natural language search with citations.</p>
-      <form onSubmit={onSubmit} className="mt-6 flex gap-2">
+      <p className="mt-1 text-ink-700">Semantic or hybrid retrieval with citations.</p>
+      <form onSubmit={onSubmit} className="mt-6 flex flex-wrap gap-2">
         <input
-          className="flex-1 rounded border border-ink-900/15 bg-white px-3 py-2"
+          className="min-w-[16rem] flex-1 rounded border border-ink-900/15 bg-white px-3 py-2"
           placeholder="Who approved Project Phoenix?"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <select
+          className="rounded border border-ink-900/15 bg-white px-3 py-2"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as "semantic" | "hybrid")}
+        >
+          <option value="hybrid">Hybrid</option>
+          <option value="semantic">Semantic</option>
+        </select>
         <button className="rounded bg-accent px-4 py-2 text-white">Search</button>
       </form>
       {error && <p className="mt-3 text-red-700">{error}</p>}
@@ -56,7 +65,8 @@ export default function SearchPage() {
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="font-medium">{r.source.title || "Untitled"}</h2>
               <span className="text-xs text-ink-700">
-                {r.source.type} · {r.score.toFixed(3)}
+                {r.source.type}
+                {r.source.retrieval ? ` · ${r.source.retrieval}` : ""} · {r.score.toFixed(3)}
               </span>
             </div>
             <p className="mt-2 text-sm text-ink-800">{r.snippet}</p>

@@ -161,6 +161,7 @@ class Decision(Base):
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     expiration_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    supersedes_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("decisions.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -198,3 +199,77 @@ class QueryLog(Base):
     query_type: Mapped[str] = mapped_column(String(32))
     query_text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ConnectorAccount(Base):
+    __tablename__ = "connector_accounts"
+    __table_args__ = (UniqueConstraint("provider", "external_account_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    provider: Mapped[str] = mapped_column(String(64), index=True)
+    external_account_id: Mapped[str] = mapped_column(String(255), default="default")
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="connected")
+    credentials: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    cursor: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DecisionLink(Base):
+    __tablename__ = "decision_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    decision_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("decisions.id", ondelete="CASCADE"))
+    link_type: Mapped[str] = mapped_column(String(64))  # document|meeting|issue|pr|message
+    target_id: Mapped[str] = mapped_column(String(255))
+    target_title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_system: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TimelineEvent(Base):
+    __tablename__ = "timeline_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    source_system: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ExpertiseSignal(Base):
+    __tablename__ = "expertise_signals"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    person_key: Mapped[str] = mapped_column(String(255), index=True)
+    topic: Mapped[str] = mapped_column(String(255), index=True)
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+    evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_system: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class KnowledgeScore(Base):
+    __tablename__ = "knowledge_scores"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    entity_type: Mapped[str] = mapped_column(String(64), index=True)
+    entity_id: Mapped[str] = mapped_column(String(255), index=True)
+    freshness: Mapped[float] = mapped_column(Float, default=0.5)
+    trust: Mapped[float] = mapped_column(Float, default=0.5)
+    completeness: Mapped[float] = mapped_column(Float, default=0.5)
+    risk: Mapped[float] = mapped_column(Float, default=0.5)
+    ownership: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    duplicate_likelihood: Mapped[float] = mapped_column(Float, default=0.0)
+    suggested_update: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
