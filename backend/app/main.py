@@ -12,18 +12,21 @@ from app.api.routes import (
     health,
     meetings,
     metrics,
+    projects,
     search,
     users,
 )
 from app.bootstrap import seed_dev_users
 from app.config import get_settings
-from app.db.session import Base, SessionLocal, engine
+from app.db.migrate import ensure_schema
+from app.db.session import SessionLocal, engine
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings = get_settings()
-    Base.metadata.create_all(bind=engine)
+    if settings.auto_migrate:
+        ensure_schema(engine, settings.database_url, prefer_migrations=True)
     db = SessionLocal()
     try:
         if settings.auth_provider == "dev":
@@ -33,13 +36,13 @@ async def lifespan(_: FastAPI):
     yield
 
 
-def create_app() -> FastAPI:
+def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="Enterprise Brain API",
         version="0.1.0",
         description="AI-Powered Enterprise Memory & Intelligence Platform (MVP)",
-        lifespan=lifespan,
+        lifespan=lifespan if enable_lifespan else None,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -52,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(users.router)
+    app.include_router(projects.router)
     app.include_router(documents.router)
     app.include_router(meetings.router)
     app.include_router(search.router)

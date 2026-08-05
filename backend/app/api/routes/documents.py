@@ -2,11 +2,11 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
-from app.config import get_settings
 from app.db.models import Document, IngestJob, JobStatus
 from app.deps import AppSettings, CurrentUser, DbSession
 from app.schemas import DocumentOut, DocumentUploadResponse, JobOut
 from app.services.ingest import process_document_job
+from app.services.parsers import extract_text_from_bytes
 from app.services.storage import ObjectStorage
 
 router = APIRouter(tags=["documents"])
@@ -26,28 +26,24 @@ async def upload_document(
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    text = ""
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        text = raw[:2000].decode("utf-8", errors="ignore")
+    filename = file.filename or "upload.txt"
+    content_type = file.content_type or "application/octet-stream"
+    text = extract_text_from_bytes(raw, filename=filename, content_type=content_type)
 
     doc_id = uuid4()
-    filename = file.filename or "upload.txt"
     object_key = f"documents/{doc_id}/{filename}"
 
     storage = ObjectStorage(settings)
     try:
-        storage.put_bytes(object_key, raw, file.content_type or "application/octet-stream")
+        storage.put_bytes(object_key, raw, content_type)
     except Exception:
-        # Allow local MVP without MinIO by keeping metadata + text only
         object_key = f"local/{doc_id}/{filename}"
 
     document = Document(
         id=doc_id,
         title=title or filename,
         filename=filename,
-        content_type=file.content_type or "application/octet-stream",
+        content_type=content_type,
         object_key=object_key,
         project_id=project_id,
         uploaded_by=user.id,
@@ -63,7 +59,6 @@ async def upload_document(
     db.refresh(document)
     db.refresh(job)
 
-    # Synchronous processing for MVP scaffold; move to Redis worker later
     process_document_job(db, settings, job.id)
     db.refresh(job)
 
@@ -101,7 +96,3 @@ def get_job(job_id: UUID, db: DbSession, _: CurrentUser):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
-
-
-# silence unused import warning in some linters
-_ = get_settings

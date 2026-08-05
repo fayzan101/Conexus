@@ -42,17 +42,30 @@ export default function DashboardPage() {
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Documents", metrics?.documents],
-          ["Meetings", metrics?.meetings],
-          ["Decisions", metrics?.decisions],
-          ["Queries (24h)", metrics?.queries_24h],
-          ["Users", metrics?.users],
-          ["Jobs pending", metrics?.jobs_pending],
-          ["Jobs failed", metrics?.jobs_failed],
-        ].map(([label, value]) => (
-          <div key={String(label)} className="rounded-lg border border-ink-900/10 bg-white/80 p-4">
+          ["Documents", metrics?.documents, false],
+          ["Meetings", metrics?.meetings, false],
+          ["Decisions", metrics?.decisions, false],
+          ["Queries (24h)", metrics?.queries_24h, false],
+          ["Users", metrics?.users, false],
+          ["Jobs pending", metrics?.jobs_pending, false],
+          ["Jobs failed", metrics?.jobs_failed, true],
+        ].map(([label, value, alert]) => (
+          <div
+            key={String(label)}
+            className={`rounded-lg border bg-white/80 p-4 ${
+              alert && Number(value) > 0
+                ? "border-red-300"
+                : "border-ink-900/10"
+            }`}
+          >
             <p className="text-sm text-ink-700">{label}</p>
-            <p className="mt-2 font-display text-3xl">{value ?? "—"}</p>
+            <p
+              className={`mt-2 font-display text-3xl ${
+                alert && Number(value) > 0 ? "text-red-700" : ""
+              }`}
+            >
+              {value ?? "—"}
+            </p>
           </div>
         ))}
       </div>

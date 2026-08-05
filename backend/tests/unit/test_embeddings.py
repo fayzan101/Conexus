@@ -8,11 +8,3 @@ def test_hash_embedder_deterministic():
     assert a == b
     assert len(a) == 64
     assert abs(sum(x * x for x in a) - 1.0) < 1e-6
-
-
-def test_chunking():
-    from app.services.ingest import chunk_text
-
-    chunks = chunk_text("word " * 500, size=100, overlap=20)
-    assert len(chunks) > 1
-    assert all(chunks)

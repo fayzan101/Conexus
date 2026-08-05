@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     ff_graphql: bool = False
     ff_connectors: bool = False
     ff_research_agent: bool = False
+    auto_migrate: bool = True
 
     access_token_expire_minutes: int = 60 * 12
 

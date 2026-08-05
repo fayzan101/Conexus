@@ -20,6 +20,18 @@ See [docs/development/local-setup.md](docs/development/local-setup.md).
 4. Update docs when behavior or APIs change  
 5. Ensure CI passes  
 
+### Phase delivery branches
+
+Each product phase lands on its **own branch** and ends with a **pull request + description**:
+
+| Phase | Branch naming | When |
+|-------|---------------|------|
+| Phase 1 Foundation | `phase-1-foundation` | After MVP slices A–E |
+| Phase 2 Knowledge Layer | `phase-2-enterprise-intelligence` | After Phase 2 slices |
+| Phase 3 AI OS | `phase-3-ai-operating-system` | After Phase 3 slices |
+
+Do not mix multiple phases in one PR. When phase work finishes, open the PR with Summary + Test plan (see existing Phase PRs for format).
+
 ## Commit Messages
 
 Prefer concise, imperative subjects focused on why:
