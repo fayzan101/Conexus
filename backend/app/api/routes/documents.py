@@ -5,8 +5,8 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from app.db.models import Document, IngestJob, JobStatus
 from app.deps import AppSettings, CurrentUser, DbSession
 from app.schemas import DocumentOut, DocumentUploadResponse, JobOut
-from app.services.ingest import process_document_job
 from app.services.parsers import extract_text_from_bytes
+from app.services.queue import enqueue_ingest_job, list_failed_jobs, retry_job
 from app.services.storage import ObjectStorage
 
 router = APIRouter(tags=["documents"])
@@ -59,7 +59,7 @@ async def upload_document(
     db.refresh(document)
     db.refresh(job)
 
-    process_document_job(db, settings, job.id)
+    enqueue_ingest_job(db, settings, job.id)
     db.refresh(job)
 
     return DocumentUploadResponse(document=document, job_id=job.id)
@@ -88,6 +88,23 @@ def delete_document(document_id: UUID, db: DbSession, user: CurrentUser):
     db.delete(document)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/v1/jobs/failed", response_model=list[JobOut])
+def failed_jobs(db: DbSession, user: CurrentUser):
+    if user.role.value != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    return list_failed_jobs(db)
+
+
+@router.post("/v1/jobs/{job_id}/retry", response_model=JobOut)
+def retry_failed_job(job_id: UUID, db: DbSession, settings: AppSettings, user: CurrentUser):
+    if user.role.value != "admin":
+        raise HTTPException(status_code=403, detail="Admin required")
+    try:
+        return retry_job(db, settings, job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/v1/jobs/{job_id}", response_model=JobOut)

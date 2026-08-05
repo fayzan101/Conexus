@@ -8,12 +8,40 @@ from app.db.models import DecisionStatus, JobStatus, Role
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str | None = None
     token_type: str = "bearer"
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class OidcExchangeRequest(BaseModel):
+    id_token: str | None = None
+    access_token: str | None = None
+
+
+class InviteCreateRequest(BaseModel):
+    email: EmailStr
+    role: Role = Role.employee
+
+
+class InviteCreateResponse(BaseModel):
+    invite_id: UUID
+    email: EmailStr
+    accept_url: str
+    token: str
+
+
+class InviteAcceptRequest(BaseModel):
+    token: str
+    password: str = Field(min_length=8)
+    full_name: str | None = None
 
 
 class UserOut(BaseModel):
@@ -111,6 +139,10 @@ class JobOut(BaseModel):
     meeting_id: UUID | None
     error: str | None
     stats: dict | None
+    attempts: int = 0
+    max_attempts: int = 3
+    dead_lettered: bool = False
+    queued_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -256,9 +288,23 @@ class ConnectorAccountOut(BaseModel):
     cursor: str | None
     last_sync_at: datetime | None
     last_error: str | None
+    health_ok: bool | None = None
+    health_detail: str | None = None
+    token_expires_at: datetime | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ConnectorHealthOut(BaseModel):
+    account_id: UUID
+    provider: str
+    ok: bool
+    lag_seconds: float | None = None
+    detail: str = ""
+    status: str
+    last_sync_at: datetime | None = None
+    last_error: str | None = None
 
 
 class ConnectorSyncResponse(BaseModel):

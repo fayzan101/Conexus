@@ -87,6 +87,9 @@ Central index for product, architecture, API, security, and operations documenta
 | [roadmap/phase-2-pr.md](roadmap/phase-2-pr.md) | Phase 2 PR description |
 | [roadmap/phase-3-plan.md](roadmap/phase-3-plan.md) | Phase 3 plan |
 | [roadmap/phase-3-pr.md](roadmap/phase-3-pr.md) | Phase 3 PR description |
+| [roadmap/production-maturity-plan.md](roadmap/production-maturity-plan.md) | Phases 4–8 to 100% production maturity |
+| [roadmap/phase-4-plan.md](roadmap/phase-4-plan.md) | Phase 4 plan |
+| [roadmap/phase-4-pr.md](roadmap/phase-4-pr.md) | Phase 4 PR description |
 
 ---
 

@@ -12,7 +12,7 @@ class VectorStore:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.client = QdrantClient(url=settings.qdrant_url, prefer_grpc=False)
-        self.collection = settings.qdrant_collection
+        self.collection = settings.versioned_collection
         self.dim = settings.embedding_dim
 
     def ensure_collection(self) -> None:

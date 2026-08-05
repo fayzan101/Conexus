@@ -20,8 +20,9 @@ Start here: [docs/README.md](docs/README.md)
 
 ## Phase delivery
 
-- Use a **separate git branch per phase** (e.g. `phase-1-foundation`, `phase-2-enterprise-intelligence`).
+- Use a **separate git branch per phase** (e.g. `phase-1-foundation` … `phase-8-ga-maturity`).
 - When phase work ends, open a **PR with Summary + Test plan**. Do not merge multiple phases in one PR.
+- Maturity path after Phase 3: [docs/roadmap/production-maturity-plan.md](docs/roadmap/production-maturity-plan.md).
 - See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 

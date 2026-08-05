@@ -29,6 +29,13 @@ Each product phase lands on its **own branch** and ends with a **pull request + 
 | Phase 1 Foundation | `phase-1-foundation` | After MVP slices A–E |
 | Phase 2 Knowledge Layer | `phase-2-enterprise-intelligence` | After Phase 2 slices |
 | Phase 3 AI OS | `phase-3-ai-operating-system` | After Phase 3 slices |
+| Phase 4 Pilot hardening | `phase-4-pilot-hardening` | SSO, live LLM, first live connectors |
+| Phase 5 Scale & quality | `phase-5-scale-quality` | Volume, multi-tenant, retrieval v2 |
+| Phase 6 Enterprise security | `phase-6-enterprise-security` | SAML/ABAC/retention/AppSec |
+| Phase 7 Platform ops | `phase-7-platform-ops` | K8s, SLOs, DR, IaC |
+| Phase 8 GA maturity | `phase-8-ga-maturity` | 100% production maturity |
+
+Full maturity plan: [docs/roadmap/production-maturity-plan.md](docs/roadmap/production-maturity-plan.md).
 
 Do not mix multiple phases in one PR. When phase work finishes, open the PR with Summary + Test plan (see existing Phase PRs for format).
 

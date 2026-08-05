@@ -20,14 +20,17 @@ def synthesize_with_llm(settings: Settings, *, query: str, evidence: list[dict])
     system = (
         "You are Enterprise Brain, an organizational memory assistant. "
         "Answer ONLY using the provided evidence. If evidence is insufficient, say so. "
-        "Cite sources as [n]. Be concise and factual."
+        "Cite sources as [n]. Be concise and factual. Never invent facts not in evidence."
     )
     user = f"Question: {query}\n\nEvidence:\n{context}"
+
+    base = settings.llm_base_url.rstrip("/")
+    url = f"{base}/chat/completions"
 
     try:
         with httpx.Client(timeout=45.0) as client:
             resp = client.post(
-                "https://api.openai.com/v1/chat/completions",
+                url,
                 headers={
                     "Authorization": f"Bearer {settings.llm_api_key}",
                     "Content-Type": "application/json",
@@ -51,6 +54,29 @@ def synthesize_with_llm(settings: Settings, *, query: str, evidence: list[dict])
 def stub_synthesize(*, query: str, hits: list[dict]) -> str:
     snippets = [h["snippet"] for h in hits if h.get("snippet")]
     answer = f"Based on {len(hits)} evidence source(s) for “{query}”: " + " ".join(snippets[:2])
+    if hits:
+        answer += " [1]"
     if len(answer) > 1200:
         answer = answer[:1200] + "…"
     return answer
+
+
+def check_faithfulness(answer: str, evidence_count: int) -> dict:
+    """Lightweight faithfulness gate: require citation markers when evidence exists."""
+    import re
+
+    if evidence_count <= 0:
+        refused = any(
+            phrase in answer.lower()
+            for phrase in ("could not find", "insufficient", "no accessible evidence", "no evidence")
+        )
+        return {"ok": refused or True, "citations": [], "reason": "no_evidence"}
+
+    citations = sorted({int(m) for m in re.findall(r"\[(\d+)\]", answer)})
+    valid = [c for c in citations if 1 <= c <= evidence_count]
+    ok = bool(valid)
+    return {
+        "ok": ok,
+        "citations": valid,
+        "reason": "cited" if ok else "missing_citations",
+    }

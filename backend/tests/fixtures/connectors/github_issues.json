@@ -1,0 +1,21 @@
+[
+  {
+    "number": 42,
+    "title": "Add Slack OAuth",
+    "body": "Implement live Slack OAuth for Project Phoenix",
+    "html_url": "https://github.com/acme/eb/pull/42",
+    "user": {"login": "dev"},
+    "created_at": "2026-01-01T00:00:00Z",
+    "pull_request": {},
+    "node_id": "PR_kw1"
+  },
+  {
+    "number": 7,
+    "title": "Ingest queue stalls",
+    "body": "Investigate Redis worker lag",
+    "html_url": "https://github.com/acme/eb/issues/7",
+    "user": {"login": "ops"},
+    "created_at": "2026-01-02T00:00:00Z",
+    "node_id": "I_kw2"
+  }
+]

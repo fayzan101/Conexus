@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "messages": [
+    {"ts": "1710000000.100", "channel": "eng", "text": "Project Phoenix kickoff tomorrow", "user": "U1"},
+    {"ts": "1710000100.200", "channel": "eng", "text": "Decision: use Neo4j for graph", "user": "U2"},
+    {"ts": "1710000200.300", "channel": "ops", "text": "Deploy window Friday", "user": "U3"}
+  ],
+  "response_metadata": {"next_cursor": ""}
+}
