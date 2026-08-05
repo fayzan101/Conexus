@@ -6,6 +6,7 @@ import { logout } from "@/lib/api";
 
 const links = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/executive", label: "Executive" },
   { href: "/search", label: "Search" },
   { href: "/chat", label: "Assistant" },
   { href: "/upload", label: "Ingest" },

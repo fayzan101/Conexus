@@ -14,6 +14,7 @@ from app.api.routes import (
     intelligence,
     meetings,
     metrics,
+    os_platform,
     projects,
     search,
     timeline,
@@ -68,6 +69,7 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     app.include_router(connectors.router)
     app.include_router(timeline.router)
     app.include_router(intelligence.router)
+    app.include_router(os_platform.router)
     app.include_router(metrics.router)
     return app
 
