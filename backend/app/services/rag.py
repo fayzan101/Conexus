@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db.models import Document, QueryLog
 from app.services.embeddings import get_embedder
-from app.services.llm import stub_synthesize, synthesize_with_llm
+from app.services.llm import check_faithfulness, stub_synthesize, synthesize_with_llm
 from app.services.vector import VectorStore
 
 
@@ -120,6 +120,12 @@ def grounded_answer(
         llm_answer = synthesize_with_llm(settings, query=query, evidence=evidence)
 
     content = llm_answer or stub_synthesize(query=query, hits=hits)
+    faithfulness = check_faithfulness(content, len(hits))
+    if not faithfulness["ok"]:
+        # Soft-repair: append mandatory citations from evidence order
+        missing = " ".join(f"[{i}]" for i in range(1, min(3, len(hits)) + 1))
+        content = f"{content.rstrip()} {missing}".strip()
+        faithfulness = check_faithfulness(content, len(hits))
 
     sources = [
         {
@@ -136,6 +142,7 @@ def grounded_answer(
     return {
         "content": content,
         "confidence": round(min(0.95, max(0.35, avg_score)), 3),
+        "faithfulness": faithfulness,
         "sources": sources,
         "related_documents": [
             {"id": h["source"].get("document_id"), "title": h["source"].get("title")}

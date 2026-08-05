@@ -28,11 +28,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export async function login(email: string, password: string) {
-  const data = await api<{ access_token: string }>("/v1/auth/login", {
+  const data = await api<{ access_token: string; refresh_token?: string }>("/v1/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
   localStorage.setItem("eb_token", data.access_token);
+  if (data.refresh_token) localStorage.setItem("eb_refresh", data.refresh_token);
   return data;
 }
 
@@ -42,4 +43,5 @@ export async function me() {
 
 export function logout() {
   localStorage.removeItem("eb_token");
+  localStorage.removeItem("eb_refresh");
 }

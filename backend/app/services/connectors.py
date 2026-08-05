@@ -5,9 +5,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.config import Settings
 from app.connectors.base import CanonicalArtifact
 from app.connectors.registry import get_connector, list_connectors
-from app.db.models import ConnectorAccount, Document, TimelineEvent
+from app.db.models import ConnectorAccount, Document, IngestJob, JobStatus, TimelineEvent
+from app.services.queue import enqueue_ingest_job
 
 
 def connect_account(
@@ -18,6 +20,7 @@ def connect_account(
     display_name: str | None,
     external_account_id: str,
     user_id: UUID | None,
+    token_expires_at: datetime | None = None,
 ) -> ConnectorAccount:
     connector = get_connector(provider)
     connector.authenticate(credentials)
@@ -34,6 +37,7 @@ def connect_account(
         existing.display_name = display_name or existing.display_name
         existing.status = "connected"
         existing.last_error = None
+        existing.token_expires_at = token_expires_at
         db.commit()
         db.refresh(existing)
         return existing
@@ -45,6 +49,7 @@ def connect_account(
         status="connected",
         credentials=credentials,
         created_by=user_id,
+        token_expires_at=token_expires_at,
     )
     db.add(account)
     db.commit()
@@ -52,20 +57,30 @@ def connect_account(
     return account
 
 
-def run_sync(db: Session, account: ConnectorAccount, *, limit: int = 50) -> dict:
+def run_sync(db: Session, account: ConnectorAccount, settings: Settings | None = None, *, limit: int = 50) -> dict:
     connector = get_connector(account.provider)
     try:
         connector.authenticate(account.credentials or {})
         result = connector.sync(cursor=account.cursor, limit=limit)
+        health = connector.health()
+        account.health_ok = health.ok
+        account.health_detail = health.detail
     except Exception as exc:
         account.status = "error"
         account.last_error = str(exc)
+        account.health_ok = False
+        account.health_detail = str(exc)
         db.commit()
         raise
 
     stored = 0
     for art in result.artifacts:
-        _persist_artifact(db, art, project_id=None)
+        doc = _persist_artifact(db, art, project_id=None)
+        if settings and settings.connector_auto_ingest and doc.text_preview:
+            job = IngestJob(job_type="document", status=JobStatus.pending, document_id=doc.id)
+            db.add(job)
+            db.flush()
+            enqueue_ingest_job(db, settings, job.id)
         stored += 1
 
     account.cursor = result.next_cursor
@@ -74,6 +89,44 @@ def run_sync(db: Session, account: ConnectorAccount, *, limit: int = 50) -> dict
     account.last_error = None
     db.commit()
     return {"stored": stored, "next_cursor": result.next_cursor, "stats": result.stats}
+
+
+def check_account_health(db: Session, account: ConnectorAccount) -> dict:
+    connector = get_connector(account.provider)
+    try:
+        connector.authenticate(account.credentials or {})
+        health = connector.health()
+    except Exception as exc:
+        account.health_ok = False
+        account.health_detail = str(exc)
+        db.commit()
+        return {
+            "account_id": account.id,
+            "provider": account.provider,
+            "ok": False,
+            "lag_seconds": None,
+            "detail": str(exc),
+            "status": account.status,
+            "last_sync_at": account.last_sync_at,
+            "last_error": account.last_error,
+        }
+
+    lag = None
+    if account.last_sync_at:
+        lag = (datetime.now(timezone.utc) - account.last_sync_at.replace(tzinfo=timezone.utc)).total_seconds()
+    account.health_ok = health.ok
+    account.health_detail = health.detail
+    db.commit()
+    return {
+        "account_id": account.id,
+        "provider": account.provider,
+        "ok": health.ok,
+        "lag_seconds": lag if lag is not None else health.lag_seconds,
+        "detail": health.detail,
+        "status": account.status,
+        "last_sync_at": account.last_sync_at,
+        "last_error": account.last_error,
+    }
 
 
 def _persist_artifact(db: Session, art: CanonicalArtifact, project_id: UUID | None) -> Document:
@@ -109,7 +162,7 @@ def available_providers() -> list[str]:
     return list_connectors()
 
 
-def webhook_ingest(db: Session, provider: str, payload: dict) -> CanonicalArtifact | None:
+def webhook_ingest(db: Session, provider: str, payload: dict, settings: Settings | None = None) -> CanonicalArtifact | None:
     """Normalize a single webhook payload using the connector's static normalizer when present."""
     connector = get_connector(provider)
     normalizers = {
@@ -121,16 +174,25 @@ def webhook_ingest(db: Session, provider: str, payload: dict) -> CanonicalArtifa
     }
     fn = normalizers.get(provider)
     if not fn:
-        # email connectors share helper via credentials path; accept generic body
         from app.connectors.email import _normalize_email
 
         if provider in {"outlook", "gmail"}:
             art = _normalize_email(payload, provider)
-            _persist_artifact(db, art, None)
+            doc = _persist_artifact(db, art, None)
+            if settings and settings.connector_auto_ingest and doc.text_preview:
+                job = IngestJob(job_type="document", status=JobStatus.pending, document_id=doc.id)
+                db.add(job)
+                db.flush()
+                enqueue_ingest_job(db, settings, job.id)
             db.commit()
             return art
         return None
     art = fn(payload)
-    _persist_artifact(db, art, None)
+    doc = _persist_artifact(db, art, None)
+    if settings and settings.connector_auto_ingest and doc.text_preview:
+        job = IngestJob(job_type="document", status=JobStatus.pending, document_id=doc.id)
+        db.add(job)
+        db.flush()
+        enqueue_ingest_job(db, settings, job.id)
     db.commit()
     return art

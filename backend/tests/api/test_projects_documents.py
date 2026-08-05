@@ -1,5 +1,5 @@
 from io import BytesIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 def test_create_project(client, auth_headers):
@@ -18,15 +18,12 @@ def test_create_project(client, auth_headers):
 
 
 def test_upload_document_with_mocks(client, auth_headers):
-    fake_graph = MagicMock()
-    fake_vector = MagicMock()
-
     with (
         patch("app.api.routes.documents.ObjectStorage") as storage_cls,
-        patch("app.api.routes.documents.process_document_job") as process_job,
+        patch("app.api.routes.documents.enqueue_ingest_job") as enqueue,
     ):
         storage_cls.return_value.put_bytes.side_effect = Exception("no minio")
-        process_job.side_effect = lambda db, settings, job_id: None
+        enqueue.side_effect = lambda db, settings, job_id: None
 
         res = client.post(
             "/v1/documents",
@@ -38,4 +35,4 @@ def test_upload_document_with_mocks(client, auth_headers):
         body = res.json()
         assert body["document"]["title"] == "Notes"
         assert "job_id" in body
-        process_job.assert_called_once()
+        enqueue.assert_called_once()

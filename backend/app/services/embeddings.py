@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 from typing import Protocol
 
+import httpx
+
 from app.config import Settings
 
 
@@ -35,6 +37,46 @@ class HashEmbedder:
         return vectors
 
 
+class OpenAIEmbedder:
+    """Managed embeddings via OpenAI-compatible /embeddings endpoint."""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.dim = settings.embedding_dim
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        if not self.settings.llm_api_key:
+            # Fall back to hash if key missing (local)
+            return HashEmbedder(dim=self.dim).embed(texts)
+
+        base = self.settings.llm_base_url.rstrip("/")
+        with httpx.Client(timeout=60.0) as client:
+            resp = client.post(
+                f"{base}/embeddings",
+                headers={
+                    "Authorization": f"Bearer {self.settings.llm_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"model": self.settings.embedding_model, "input": texts},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            vectors = [row["embedding"] for row in sorted(data["data"], key=lambda r: r["index"])]
+            # Truncate/pad to configured dim for collection compatibility
+            out: list[list[float]] = []
+            for vec in vectors:
+                if len(vec) > self.dim:
+                    vec = vec[: self.dim]
+                elif len(vec) < self.dim:
+                    vec = vec + [0.0] * (self.dim - len(vec))
+                out.append(vec)
+            return out
+
+
 def get_embedder(settings: Settings) -> Embedder:
-    # Future: sentence-transformers / OpenAI adapters
+    provider = (settings.embedding_provider or "hash").lower()
+    if provider in {"openai", "azure", "managed"}:
+        return OpenAIEmbedder(settings)
     return HashEmbedder(dim=settings.embedding_dim)

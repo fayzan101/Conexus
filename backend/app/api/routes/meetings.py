@@ -3,7 +3,7 @@ from fastapi import APIRouter, status
 from app.db.models import IngestJob, JobStatus, Meeting
 from app.deps import AppSettings, CurrentUser, DbSession
 from app.schemas import MeetingCreate, MeetingIngestResponse, MeetingOut
-from app.services.ingest import process_meeting_job
+from app.services.queue import enqueue_ingest_job
 
 router = APIRouter(prefix="/v1/meetings", tags=["meetings"])
 
@@ -31,7 +31,7 @@ def ingest_transcript(
     db.refresh(meeting)
     db.refresh(job)
 
-    process_meeting_job(db, settings, job.id)
+    enqueue_ingest_job(db, settings, job.id)
     db.refresh(meeting)
     db.refresh(job)
 
