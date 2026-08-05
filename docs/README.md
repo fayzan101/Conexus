@@ -84,6 +84,7 @@ Central index for product, architecture, API, security, and operations documenta
 | [roadmap/phases.md](roadmap/phases.md) | Phase 1–3 roadmap |
 | [roadmap/mvp.md](roadmap/mvp.md) | MVP (2–3 months) detail |
 | [roadmap/phase-2-plan.md](roadmap/phase-2-plan.md) | Phase 2 plan (post–Phase 1) |
+| [roadmap/phase-2-pr.md](roadmap/phase-2-pr.md) | Phase 2 PR description |
 
 ---
 

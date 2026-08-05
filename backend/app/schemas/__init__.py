@@ -122,12 +122,15 @@ class SearchFilters(BaseModel):
     date_from: datetime | None = None
     date_to: datetime | None = None
     types: list[str] | None = None
+    source_system: str | None = None
+    people: list[str] | None = None
 
 
 class SearchRequest(BaseModel):
     query: str
     filters: SearchFilters | None = None
     limit: int = Field(default=10, ge=1, le=50)
+    mode: str = Field(default="semantic")  # semantic | hybrid
 
 
 class SearchHit(BaseModel):
@@ -181,6 +184,8 @@ class DecisionCreate(BaseModel):
     project_id: UUID | None = None
     decided_at: datetime | None = None
     expiration_date: datetime | None = None
+    supersedes_id: UUID | None = None
+    links: list[dict] | None = None
 
 
 class DecisionUpdate(BaseModel):
@@ -195,6 +200,7 @@ class DecisionUpdate(BaseModel):
     project_id: UUID | None = None
     decided_at: datetime | None = None
     expiration_date: datetime | None = None
+    supersedes_id: UUID | None = None
 
 
 class DecisionOut(BaseModel):
@@ -210,7 +216,111 @@ class DecisionOut(BaseModel):
     project_id: UUID | None
     decided_at: datetime | None
     expiration_date: datetime | None
+    supersedes_id: UUID | None = None
     created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DecisionLinkCreate(BaseModel):
+    link_type: str
+    target_id: str
+    target_title: str | None = None
+    source_system: str | None = None
+
+
+class DecisionLinkOut(BaseModel):
+    id: UUID
+    decision_id: UUID
+    link_type: str
+    target_id: str
+    target_title: str | None
+    source_system: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConnectorConnectRequest(BaseModel):
+    credentials: dict
+    display_name: str | None = None
+    external_account_id: str | None = "default"
+
+
+class ConnectorAccountOut(BaseModel):
+    id: UUID
+    provider: str
+    external_account_id: str
+    display_name: str | None
+    status: str
+    cursor: str | None
+    last_sync_at: datetime | None
+    last_error: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConnectorSyncResponse(BaseModel):
+    stored: int
+    next_cursor: str | None
+    stats: dict
+
+
+class WebhookIngestRequest(BaseModel):
+    data: dict
+
+
+class TimelineEventCreate(BaseModel):
+    event_type: str
+    title: str
+    summary: str | None = None
+    project_id: UUID | None = None
+    occurred_at: datetime
+    source_system: str | None = None
+    source_ref: str | None = None
+    metadata_json: dict | None = None
+
+
+class TimelineEventOut(BaseModel):
+    id: UUID
+    event_type: str
+    title: str
+    summary: str | None
+    project_id: UUID | None
+    occurred_at: datetime
+    source_system: str | None
+    source_ref: str | None
+    metadata_json: dict | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ExpertOut(BaseModel):
+    person: str
+    score: float
+    topics: list[str]
+    confidence: float
+    evidence: list[str]
+
+
+class ExpertRankResponse(BaseModel):
+    experts: list[ExpertOut]
+
+
+class KnowledgeScoreOut(BaseModel):
+    id: UUID
+    entity_type: str
+    entity_id: str
+    freshness: float
+    trust: float
+    completeness: float
+    risk: float
+    ownership: str | None
+    duplicate_likelihood: float
+    suggested_update: str | None
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
