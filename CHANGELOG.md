@@ -9,6 +9,12 @@ This project follows semantic versioning once the first public API is tagged.
 
 ### Added
 
+- Phase 1 implementation slices A–E with unit/API tests
+  - Neon/Alembic schema bootstrap, SQLite test harness
+  - Document parsers (text/PDF/DOCX), projects CRUD
+  - ACL-aware search, grounded chat + optional OpenAI LLM
+  - Graph neighbor UI, RBAC tests, pilot smoke script
+  - Phase 2 plan (`docs/roadmap/phase-2-plan.md`)
 - MVP codebase scaffold
   - FastAPI backend (auth, users, documents, meetings, search, chat, graph, decisions, metrics)
   - Next.js frontend (login, dashboard, search, chat, ingest, graph, decisions, admin)

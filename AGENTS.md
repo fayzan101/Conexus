@@ -18,7 +18,12 @@ Start here: [docs/README.md](docs/README.md)
 | Adding APIs | [docs/api/rest.md](docs/api/rest.md) |
 | Auth / permissions | [docs/security/access-control.md](docs/security/access-control.md) |
 
-## Non-Negotiables
+## Phase delivery
+
+- Use a **separate git branch per phase** (e.g. `phase-1-foundation`, `phase-2-enterprise-intelligence`).
+- When phase work ends, open a **PR with Summary + Test plan**. Do not merge multiple phases in one PR.
+- See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 
 1. Scope work to the active phase unless the user expands scope.  
 2. Prefer adapters for Neo4j/Qdrant/LLM providers.  

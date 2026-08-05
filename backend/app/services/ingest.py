@@ -10,11 +10,12 @@ from app.config import Settings
 from app.db.models import Document, DocumentChunk, IngestJob, JobStatus, Meeting
 from app.services.embeddings import get_embedder
 from app.services.graph import GraphStore
+from app.services.parsers import normalize_whitespace
 from app.services.vector import VectorStore
 
 
 def chunk_text(text: str, size: int = 800, overlap: int = 100) -> list[str]:
-    text = re.sub(r"\s+", " ", text).strip()
+    text = normalize_whitespace(text)
     if not text:
         return []
     chunks: list[str] = []
@@ -42,13 +43,25 @@ def extract_entities(text: str) -> dict:
     }
 
 
-def process_document_job(db: Session, settings: Settings, job_id: UUID) -> IngestJob:
+def process_document_job(
+    db: Session,
+    settings: Settings,
+    job_id: UUID,
+    *,
+    graph: GraphStore | None = None,
+    vector_store: VectorStore | None = None,
+) -> IngestJob:
     job = db.get(IngestJob, job_id)
     if not job or not job.document_id:
         raise ValueError("Job or document missing")
 
     job.status = JobStatus.running
+    job.error = None
     db.commit()
+
+    owns_graph = graph is None
+    graph = graph or GraphStore(settings)
+    vector_store = vector_store or VectorStore(settings)
 
     try:
         document = db.get(Document, job.document_id)
@@ -59,8 +72,6 @@ def process_document_job(db: Session, settings: Settings, job_id: UUID) -> Inges
         chunks = chunk_text(text)
         embedder = get_embedder(settings)
         vectors = embedder.embed(chunks) if chunks else []
-        vector_store = VectorStore(settings)
-        graph = GraphStore(settings)
 
         graph.upsert_node(
             "Document",
@@ -68,7 +79,11 @@ def process_document_job(db: Session, settings: Settings, job_id: UUID) -> Inges
             {"title": document.title, "source_system": document.source_system},
         )
         if document.project_id:
-            graph.upsert_node("Project", str(document.project_id), {"name": str(document.project_id)})
+            graph.upsert_node(
+                "Project",
+                str(document.project_id),
+                {"name": str(document.project_id)},
+            )
             graph.upsert_edge(
                 "Document",
                 str(document.id),
@@ -117,7 +132,6 @@ def process_document_job(db: Session, settings: Settings, job_id: UUID) -> Inges
             "chunks_indexed": len(chunks),
             "entities": {k: len(v) for k, v in entities.items()},
         }
-        graph.close()
         db.commit()
         db.refresh(job)
         return job
@@ -127,15 +141,33 @@ def process_document_job(db: Session, settings: Settings, job_id: UUID) -> Inges
         db.commit()
         db.refresh(job)
         return job
+    finally:
+        if owns_graph:
+            try:
+                graph.close()
+            except Exception:
+                pass
 
 
-def process_meeting_job(db: Session, settings: Settings, job_id: UUID) -> IngestJob:
+def process_meeting_job(
+    db: Session,
+    settings: Settings,
+    job_id: UUID,
+    *,
+    graph: GraphStore | None = None,
+    vector_store: VectorStore | None = None,
+) -> IngestJob:
     job = db.get(IngestJob, job_id)
     if not job or not job.meeting_id:
         raise ValueError("Job or meeting missing")
 
     job.status = JobStatus.running
+    job.error = None
     db.commit()
+
+    owns_graph = graph is None
+    graph = graph or GraphStore(settings)
+    vector_store = vector_store or VectorStore(settings)
 
     try:
         meeting = db.get(Meeting, job.meeting_id)
@@ -155,16 +187,17 @@ def process_meeting_job(db: Session, settings: Settings, job_id: UUID) -> Ingest
             "referenced_documents": [],
         }
 
-        # Index transcript as searchable chunks
         chunks = chunk_text(transcript)
         embedder = get_embedder(settings)
         vectors = embedder.embed(chunks) if chunks else []
-        vector_store = VectorStore(settings)
-        graph = GraphStore(settings)
 
         graph.upsert_node("Meeting", str(meeting.id), {"title": meeting.title})
         if meeting.project_id:
-            graph.upsert_node("Project", str(meeting.project_id), {"name": str(meeting.project_id)})
+            graph.upsert_node(
+                "Project",
+                str(meeting.project_id),
+                {"name": str(meeting.project_id)},
+            )
             graph.upsert_edge(
                 "Meeting",
                 str(meeting.id),
@@ -204,7 +237,6 @@ def process_meeting_job(db: Session, settings: Settings, job_id: UUID) -> Ingest
             "decisions": len(entities["decisions"]),
             "tasks": len(entities["tasks"]),
         }
-        graph.close()
         db.commit()
         db.refresh(job)
         return job
@@ -214,3 +246,9 @@ def process_meeting_job(db: Session, settings: Settings, job_id: UUID) -> Ingest
         db.commit()
         db.refresh(job)
         return job
+    finally:
+        if owns_graph:
+            try:
+                graph.close()
+            except Exception:
+                pass

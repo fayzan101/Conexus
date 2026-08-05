@@ -22,6 +22,31 @@
 
 ---
 
+## Implementation checklist (Slice E)
+
+| Criterion | Status |
+|-----------|--------|
+| Neon/Postgres schema via Alembic + auto-migrate on startup | Done |
+| Dev JWT auth + seeded admin/employee | Done |
+| Document + transcript ingest with text/PDF/DOCX parsers | Done |
+| Projects CRUD for linking uploads | Done |
+| Semantic search + ACL filter for private docs | Done |
+| Grounded chat (LLM when `LLM_API_KEY` set; stub otherwise) | Done |
+| Graph API + UI neighbor expansion | Done |
+| Admin user invite + RBAC 403 tests | Done |
+| Unit + API tests in CI (no live secrets required) | Done |
+| Phase 2 plan drafted | Done — see [phase-2-plan.md](phase-2-plan.md) |
+
+### Pilot path (manual)
+
+1. `docker compose up -d neo4j qdrant redis minio minio-init`  
+2. Configure Neon `DATABASE_URL` in `.env`  
+3. Start API + web  
+4. Login as admin → create project → upload text/PDF → ingest transcript  
+5. Search + chat should return citations; graph shows Document/Meeting nodes  
+
+---
+
 ## Out of Scope (defer)
 
 - Full connector suite  
@@ -30,17 +55,6 @@
 - Predictive analytics / multi-agent research  
 - GraphQL & webhooks (optional stretch)  
 - Air-gapped certification  
-
----
-
-## Suggested Workstreams
-
-1. **Platform** — monorepo, Compose, CI, auth  
-2. **Ingest** — upload, workers, MinIO, job status  
-3. **Retrieval** — Qdrant + search API  
-4. **Graph** — Neo4j schema + upsert  
-5. **Assistant** — RAG chat + answer contract  
-6. **Web** — login, upload, search, chat, graph view, admin  
 
 ---
 
@@ -63,4 +77,4 @@
 | Scope creep | Lock Phase 2 connectors out of MVP |
 | ACL bugs | Automated ACL regression suite |
 
-Related: [../modules/mvp-modules.md](../modules/mvp-modules.md), [../product/prd.md](../product/prd.md)
+Related: [../modules/mvp-modules.md](../modules/mvp-modules.md), [../product/prd.md](../product/prd.md), [phase-2-plan.md](phase-2-plan.md)

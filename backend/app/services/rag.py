@@ -7,38 +7,40 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db.models import Document, QueryLog
 from app.services.embeddings import get_embedder
+from app.services.llm import stub_synthesize, synthesize_with_llm
 from app.services.vector import VectorStore
 
 
-def semantic_search(
+def filter_hits_by_acl(
     db: Session,
-    settings: Settings,
+    hits: list[dict],
     *,
-    query: str,
     user_id: UUID | None,
-    limit: int = 10,
-    project_id: UUID | None = None,
 ) -> list[dict]:
-    embedder = get_embedder(settings)
-    vector = embedder.embed([query])[0]
-    store = VectorStore(settings)
-    hits = store.search(vector=vector, limit=limit, project_id=project_id)
-
+    """Drop private evidence the current user cannot access."""
     results = []
     for hit in hits:
-        payload = hit["payload"]
-        # ACL: MVP allows org-visible; private only if uploader matches (future)
+        payload = hit.get("payload") or {}
         visibility = payload.get("visibility", "org")
         if visibility == "private":
             doc_id = payload.get("document_id")
-            if doc_id:
-                doc = db.get(Document, UUID(doc_id))
-                if doc and doc.uploaded_by and user_id and doc.uploaded_by != user_id:
-                    continue
+            if not doc_id or not user_id:
+                continue
+            doc = db.get(Document, UUID(str(doc_id)))
+            if not doc or doc.uploaded_by != user_id:
+                continue
+        results.append(hit)
+    return results
+
+
+def hits_to_search_results(hits: list[dict]) -> list[dict]:
+    results = []
+    for hit in hits:
+        payload = hit.get("payload") or {}
         results.append(
             {
-                "id": hit["id"],
-                "score": hit["score"],
+                "id": str(hit["id"]),
+                "score": float(hit["score"]),
                 "snippet": payload.get("snippet", ""),
                 "source": {
                     "document_id": payload.get("document_id"),
@@ -49,14 +51,27 @@ def semantic_search(
                 },
             }
         )
+    return results
 
-    db.add(
-        QueryLog(
-            user_id=user_id,
-            query_type="search",
-            query_text=query,
-        )
-    )
+
+def semantic_search(
+    db: Session,
+    settings: Settings,
+    *,
+    query: str,
+    user_id: UUID | None,
+    limit: int = 10,
+    project_id: UUID | None = None,
+    vector_store: VectorStore | None = None,
+) -> list[dict]:
+    embedder = get_embedder(settings)
+    vector = embedder.embed([query])[0]
+    store = vector_store or VectorStore(settings)
+    raw_hits = store.search(vector=vector, limit=limit * 2, project_id=project_id)
+    allowed = filter_hits_by_acl(db, raw_hits, user_id=user_id)[:limit]
+    results = hits_to_search_results(allowed)
+
+    db.add(QueryLog(user_id=user_id, query_type="search", query_text=query))
     db.commit()
     return results
 
@@ -67,8 +82,17 @@ def grounded_answer(
     *,
     query: str,
     user_id: UUID,
+    vector_store: VectorStore | None = None,
+    llm_fn=None,
 ) -> dict:
-    hits = semantic_search(db, settings, query=query, user_id=user_id, limit=5)
+    hits = semantic_search(
+        db,
+        settings,
+        query=query,
+        user_id=user_id,
+        limit=5,
+        vector_store=vector_store,
+    )
     db.add(QueryLog(user_id=user_id, query_type="chat", query_text=query))
     db.commit()
 
@@ -87,18 +111,15 @@ def grounded_answer(
             "supporting_evidence": [],
         }
 
-    # Stub synthesis (replace with LLM when LLM_API_KEY is set)
-    if settings.llm_api_key:
-        # Placeholder for real provider call; keep deterministic scaffold behavior.
-        pass
+    evidence = [
+        {"title": h["source"].get("title"), "snippet": h["snippet"], "id": h["id"]} for h in hits
+    ]
+    if llm_fn is not None:
+        llm_answer = llm_fn(settings, query=query, evidence=evidence)
+    else:
+        llm_answer = synthesize_with_llm(settings, query=query, evidence=evidence)
 
-    snippets = [h["snippet"] for h in hits if h["snippet"]]
-    answer = (
-        f"Based on {len(hits)} evidence source(s): "
-        + " ".join(snippets[:2])
-    )
-    if len(answer) > 1200:
-        answer = answer[:1200] + "…"
+    content = llm_answer or stub_synthesize(query=query, hits=hits)
 
     sources = [
         {
@@ -113,7 +134,7 @@ def grounded_answer(
     avg_score = sum(h["score"] for h in hits) / len(hits)
 
     return {
-        "content": answer,
+        "content": content,
         "confidence": round(min(0.95, max(0.35, avg_score)), 3),
         "sources": sources,
         "related_documents": [
@@ -124,5 +145,7 @@ def grounded_answer(
         "related_projects": [],
         "people_involved": [],
         "timeline": [],
-        "supporting_evidence": [{"quote": h["snippet"][:300], "source_id": h["id"]} for h in hits[:3]],
+        "supporting_evidence": [
+            {"quote": h["snippet"][:300], "source_id": h["id"]} for h in hits[:3]
+        ],
     }
