@@ -273,3 +273,90 @@ class KnowledgeScore(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Prediction(Base):
+    __tablename__ = "predictions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    prediction_type: Mapped[str] = mapped_column(String(64), index=True)
+    subject_type: Mapped[str] = mapped_column(String(64))
+    subject_id: Mapped[str] = mapped_column(String(255))
+    title: Mapped[str] = mapped_column(String(512))
+    probability: Mapped[float] = mapped_column(Float, default=0.5)
+    severity: Mapped[str] = mapped_column(String(32), default="medium")
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    features: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkflowPattern(Base):
+    __tablename__ = "workflow_patterns"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    pattern_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    occurrences: Mapped[int] = mapped_column(Integer, default=1)
+    suggestion: Mapped[str | None] = mapped_column(Text, nullable=True)
+    automation_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sample_evidence: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class DependencyEdge(Base):
+    __tablename__ = "dependency_edges"
+    __table_args__ = (UniqueConstraint("from_id", "to_id", "rel_type"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    from_type: Mapped[str] = mapped_column(String(64))
+    from_id: Mapped[str] = mapped_column(String(255), index=True)
+    to_type: Mapped[str] = mapped_column(String(64))
+    to_id: Mapped[str] = mapped_column(String(255), index=True)
+    rel_type: Mapped[str] = mapped_column(String(64), default="depends_on")
+    criticality: Mapped[float] = mapped_column(Float, default=0.5)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Opportunity(Base):
+    __tablename__ = "opportunities"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    category: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    score: Mapped[float] = mapped_column(Float, default=0.5)
+    evidence: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Recommendation(Base):
+    __tablename__ = "recommendations"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    category: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(512))
+    action: Mapped[str] = mapped_column(Text)
+    priority: Mapped[str] = mapped_column(String(32), default="medium")
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    related_refs: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="proposed")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ResearchReport(Base):
+    __tablename__ = "research_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    problem: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="completed")
+    evidence: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    patterns: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recommendations: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    executive_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -356,3 +356,112 @@ class MetricsOverview(BaseModel):
     jobs_pending: int
     jobs_failed: int
     queries_24h: int
+
+
+class PredictionOut(BaseModel):
+    id: UUID
+    prediction_type: str
+    subject_type: str
+    subject_id: str
+    title: str
+    probability: float
+    severity: str
+    rationale: str | None
+    features: dict | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class WorkflowPatternOut(BaseModel):
+    id: UUID
+    name: str
+    pattern_key: str
+    occurrences: int
+    suggestion: str | None
+    automation_type: str | None
+    sample_evidence: list | None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DependencyCreate(BaseModel):
+    from_type: str
+    from_id: str
+    to_type: str
+    to_id: str
+    rel_type: str = "depends_on"
+    criticality: float = 0.5
+    metadata_json: dict | None = None
+
+
+class DependencyOut(BaseModel):
+    id: UUID
+    from_type: str
+    from_id: str
+    to_type: str
+    to_id: str
+    rel_type: str
+    criticality: float
+    metadata_json: dict | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class OpportunityOut(BaseModel):
+    id: UUID
+    category: str
+    title: str
+    description: str | None
+    score: float
+    evidence: list | None
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RecommendationOut(BaseModel):
+    id: UUID
+    category: str
+    title: str
+    action: str
+    priority: str
+    confidence: float
+    related_refs: list | None
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ResearchRequest(BaseModel):
+    problem: str = Field(min_length=3)
+
+
+class ResearchReportOut(BaseModel):
+    id: UUID
+    problem: str
+    status: str
+    evidence: list | None
+    patterns: list | None
+    root_cause: str | None
+    recommendations: list | None
+    executive_summary: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ExecutiveDashboardOut(BaseModel):
+    knowledge_health: float
+    decision_count: int
+    document_count: int
+    prediction_count: int
+    high_risk_predictions: int
+    workflow_automation_candidates: int
+    open_opportunities: int
+    open_recommendations: int
+    decision_velocity_proxy: int
