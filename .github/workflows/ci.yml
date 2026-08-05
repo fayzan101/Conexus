@@ -23,7 +23,7 @@ jobs:
         env:
           AUTH_PROVIDER: dev
           SECRET_KEY: test-secret
-          DATABASE_URL: sqlite+pysqlite:///:memory:
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
 
   frontend:
     runs-on: ubuntu-latest
