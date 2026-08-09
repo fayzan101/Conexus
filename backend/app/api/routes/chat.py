@@ -77,6 +77,8 @@ def send_message(
             "people_involved": answer["people_involved"],
             "timeline": answer["timeline"],
             "supporting_evidence": answer["supporting_evidence"],
+            "blocked_reason": answer.get("blocked_reason"),
+            "acl_summary": answer.get("acl_summary"),
         },
     )
     db.add(assistant)
@@ -96,5 +98,7 @@ def send_message(
         people_involved=answer["people_involved"],
         timeline=answer["timeline"],
         supporting_evidence=answer["supporting_evidence"],
+        blocked_reason=answer.get("blocked_reason"),
+        acl_summary=answer.get("acl_summary"),
         created_at=assistant.created_at,
     )

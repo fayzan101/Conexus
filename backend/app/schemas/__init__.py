@@ -174,6 +174,9 @@ class SearchHit(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[SearchHit]
+    blocked: list[dict] | None = None
+    acl_summary: dict | None = None
+    blocked_reason: str | None = None
 
 
 class ChatSessionOut(BaseModel):
@@ -199,6 +202,8 @@ class ChatMessageOut(BaseModel):
     people_involved: list | None = None
     timeline: list | None = None
     supporting_evidence: list | None = None
+    blocked_reason: str | None = None
+    acl_summary: dict | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

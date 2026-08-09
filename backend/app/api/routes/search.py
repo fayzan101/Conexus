@@ -13,6 +13,9 @@ router = APIRouter(prefix="/v1/search", tags=["search"])
 def search(payload: SearchRequest, db: DbSession, user: CurrentUser, settings: AppSettings):
     filters = payload.filters
     project_id = filters.project_id if filters else None
+    blocked = []
+    acl_summary = None
+    blocked_reason = None
     if payload.mode == "hybrid":
         results = hybrid_search(
             db,
@@ -29,7 +32,7 @@ def search(payload: SearchRequest, db: DbSession, user: CurrentUser, settings: A
             people=filters.people if filters else None,
         )
     else:
-        results = semantic_search(
+        out = semantic_search(
             db,
             settings,
             query=payload.query,
@@ -38,7 +41,20 @@ def search(payload: SearchRequest, db: DbSession, user: CurrentUser, settings: A
             project_id=project_id,
             tenant_id=user.tenant_id,
         )
-    return SearchResponse(results=results)
+        results = out["results"]
+        blocked = out["blocked"]
+        acl_summary = out["acl_summary"]
+        if not results and blocked:
+            blocked_reason = (
+                "Results were filtered by access policy: "
+                + ", ".join(acl_summary.get("blocked_reasons") or [])
+            )
+    return SearchResponse(
+        results=results,
+        blocked=blocked or None,
+        acl_summary=acl_summary,
+        blocked_reason=blocked_reason,
+    )
 
 
 @router.get("/recent")

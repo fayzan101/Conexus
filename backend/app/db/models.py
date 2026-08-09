@@ -65,6 +65,9 @@ class User(Base):
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     idp_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    scim_external_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    region: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    clearance: Mapped[str] = mapped_column(String(32), default="internal")  # public|internal|confidential|restricted
     role: Mapped[Role] = mapped_column(_str_enum(Role), default=Role.employee)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -113,6 +116,10 @@ class Document(Base):
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     visibility: Mapped[str] = mapped_column(String(32), default="org")
+    classification: Mapped[str] = mapped_column(String(32), default="internal")
+    region: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    legal_hold: Mapped[bool] = mapped_column(Boolean, default=False)
+    retain_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     text_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
     search_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -453,3 +460,56 @@ class TenantCryptoKey(Base):
     algorithm: Mapped[str] = mapped_column(String(64), default="aes-256-gcm")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProjectMembership(Base):
+    __tablename__ = "project_memberships"
+    __table_args__ = (UniqueConstraint("project_id", "user_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    role: Mapped[str] = mapped_column(String(32), default="member")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuditLog(Base):
+    """Append-only security/compliance audit trail (no updates in application code)."""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    actor_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    resource_type: Mapped[str] = mapped_column(String(64))
+    resource_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LegalHold(Base):
+    __tablename__ = "legal_holds"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RetentionPolicy(Base):
+    __tablename__ = "retention_policies"
+    __table_args__ = (UniqueConstraint("tenant_id", "resource_type"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    resource_type: Mapped[str] = mapped_column(String(64), default="document")
+    retain_days: Mapped[int] = mapped_column(Integer, default=365)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

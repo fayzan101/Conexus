@@ -29,11 +29,11 @@ class Settings(BaseSettings):
     qdrant_collection: str = "eb_chunks"
 
     redis_url: str = "redis://localhost:6379/0"
-    queue_backend: str = "memory"  # memory | redis
+    queue_backend: str = "memory"
     queue_inline: bool = True
     worker_poll_seconds: float = 1.0
     connector_auto_ingest: bool = True
-    event_bus_backend: str = "memory"  # memory | kafka
+    event_bus_backend: str = "memory"
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_topic_ingest: str = "eb.ingest.events"
     queue_max_depth: int = 10_000
@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     object_store_region: str = "us-east-1"
     object_store_use_ssl: bool = False
 
-    auth_provider: str = "dev"
+    auth_provider: str = "dev"  # dev | oidc | saml
     auth_issuer: str = ""
     auth_audience: str = ""
     auth_jwks_url: str = ""
@@ -54,6 +54,18 @@ class Settings(BaseSettings):
     auth_invite_expire_hours: int = 72
     refresh_token_expire_days: int = 14
     access_token_expire_minutes: int = 60 * 12
+    saml_sp_entity_id: str = ""
+    saml_acs_url: str = ""
+    saml_idp_entity_id: str = ""
+    saml_idp_sso_url: str = ""
+    saml_idp_x509_cert: str = ""
+    scim_bearer_token: str = ""
+    kms_backend: str = "local"  # local | vault
+    vault_addr: str = ""
+    vault_token: str = ""
+    retention_days_default: int = 365
+    require_tls: bool = False
+    encryption_at_rest_verified: bool = False
     dev_admin_email: str = "admin@enterprisebrain.local"
     dev_admin_password: str = "admin123"
     dev_user_email: str = "user@enterprisebrain.local"
@@ -63,6 +75,9 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
     llm_base_url: str = "https://api.openai.com/v1"
+    llm_mode: str = "public"  # public | private | airgap
+    llm_allow_public_egress: bool = True
+    llm_no_train: bool = True
     require_llm_key: bool = False
     embedding_provider: str = "hash"
     embedding_model: str = "text-embedding-3-small"
@@ -118,10 +133,19 @@ class Settings(BaseSettings):
         if self.auth_provider == "dev" and env not in {"local", "test", "development"}:
             raise ValueError(
                 "AUTH_PROVIDER=dev is only allowed when ENVIRONMENT is local|test|development. "
-                "Use AUTH_PROVIDER=oidc for pilot/staging/production."
+                "Use AUTH_PROVIDER=oidc or saml for staging/production."
             )
         if self.require_llm_key and not self.llm_api_key and env not in {"local", "test"}:
             raise ValueError("LLM_API_KEY is required when REQUIRE_LLM_KEY=true outside local/test.")
+        mode = (self.llm_mode or "public").lower()
+        if mode in {"private", "airgap"} and not self.llm_allow_public_egress:
+            public_hosts = ("api.openai.com", "openai.azure.com")
+            base = (self.llm_base_url or "").lower()
+            if any(h in base for h in public_hosts):
+                raise ValueError(
+                    "LLM_MODE=private|airgap with LLM_ALLOW_PUBLIC_EGRESS=false forbids public LLM hosts. "
+                    "Set LLM_BASE_URL to a VPC/private endpoint."
+                )
         return self
 
 

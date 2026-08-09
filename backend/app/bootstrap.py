@@ -6,7 +6,7 @@ from app.deps import get_user_by_email, hash_password
 
 
 def seed_dev_users(db: Session, settings: Settings) -> None:
-    from app.services.events import ensure_tenant_key
+    from app.services.security import ensure_tenant_key
 
     ensure_tenant_key(db, settings, settings.default_tenant_id)
     seeds = [

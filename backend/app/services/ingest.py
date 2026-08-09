@@ -125,6 +125,8 @@ def process_document_job(
                     "visibility": document.visibility,
                     "type": "document",
                     "tenant_id": document.tenant_id,
+                    "classification": getattr(document, "classification", None) or "internal",
+                    "region": getattr(document, "region", None),
                 },
             )
 
