@@ -5,10 +5,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 
+from app.connectors.drive import google_oauth_authorize_url, google_oauth_exchange
 from app.connectors.github import github_oauth_authorize_url, github_oauth_exchange
+from app.connectors.jira import jira_oauth_authorize_url, jira_oauth_exchange
 from app.connectors.registry import list_connectors
 from app.connectors.security import verify_github_signature, verify_slack_signature
 from app.connectors.slack import slack_oauth_authorize_url, slack_oauth_exchange
+from app.connectors.teams import ms_oauth_authorize_url, ms_oauth_exchange
 from app.db.models import ConnectorAccount, Role, User
 from app.deps import AppSettings, CurrentUser, DbSession, require_roles
 from app.schemas import (
@@ -29,13 +32,23 @@ def list_available(_: CurrentUser):
 
 
 @router.get("/accounts", response_model=list[ConnectorAccountOut])
-def list_accounts(db: DbSession, _: CurrentUser):
-    return db.query(ConnectorAccount).order_by(ConnectorAccount.created_at.desc()).all()
+def list_accounts(db: DbSession, user: CurrentUser):
+    return (
+        db.query(ConnectorAccount)
+        .filter(ConnectorAccount.tenant_id == user.tenant_id)
+        .order_by(ConnectorAccount.created_at.desc())
+        .all()
+    )
 
 
 @router.get("/health", response_model=list[ConnectorHealthOut])
-def connectors_health(db: DbSession, _: CurrentUser):
-    accounts = db.query(ConnectorAccount).order_by(ConnectorAccount.created_at.desc()).all()
+def connectors_health(db: DbSession, user: CurrentUser):
+    accounts = (
+        db.query(ConnectorAccount)
+        .filter(ConnectorAccount.tenant_id == user.tenant_id)
+        .order_by(ConnectorAccount.created_at.desc())
+        .all()
+    )
     return [ConnectorHealthOut(**check_account_health(db, a)) for a in accounts]
 
 
@@ -54,6 +67,7 @@ def connect(
             display_name=payload.display_name,
             external_account_id=payload.external_account_id or "default",
             user_id=user.id,
+            tenant_id=user.tenant_id,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -76,6 +90,28 @@ def oauth_start(
         if not settings.github_client_id:
             raise HTTPException(status_code=400, detail="GITHUB_CLIENT_ID not configured")
         url = github_oauth_authorize_url(settings, state=state)
+    elif provider in {"teams", "outlook"}:
+        if not settings.ms_client_id:
+            raise HTTPException(status_code=400, detail="MS_CLIENT_ID not configured")
+        scopes = (
+            "offline_access User.Read ChannelMessage.Read.All"
+            if provider == "teams"
+            else "offline_access User.Read Mail.Read"
+        )
+        url = ms_oauth_authorize_url(settings, state=f"{provider}:{state}", scopes=scopes)
+    elif provider in {"google_drive", "gmail"}:
+        if not settings.google_client_id:
+            raise HTTPException(status_code=400, detail="GOOGLE_CLIENT_ID not configured")
+        scopes = (
+            "https://www.googleapis.com/auth/drive.readonly"
+            if provider == "google_drive"
+            else "https://www.googleapis.com/auth/gmail.readonly"
+        )
+        url = google_oauth_authorize_url(settings, state=f"{provider}:{state}", scopes=scopes)
+    elif provider == "jira":
+        if not settings.jira_client_id:
+            raise HTTPException(status_code=400, detail="JIRA_CLIENT_ID not configured")
+        url = jira_oauth_authorize_url(settings, state=state)
     else:
         raise HTTPException(status_code=400, detail=f"OAuth not implemented for {provider}")
     return {"authorize_url": url, "state": state}
@@ -94,6 +130,7 @@ def oauth_callback(
         raise HTTPException(status_code=400, detail=error)
     if not code:
         raise HTTPException(status_code=400, detail="Missing OAuth code")
+    tenant_id = settings.default_tenant_id
     try:
         if provider == "slack":
             data = slack_oauth_exchange(settings, code=code)
@@ -109,6 +146,27 @@ def oauth_callback(
             credentials = {"access_token": data.get("access_token"), "token_type": data.get("token_type")}
             external_id = "default"
             display = "GitHub"
+        elif provider in {"teams", "outlook"}:
+            redirect = settings.ms_redirect_uri or f"{settings.api_base_url}/v1/connectors/{provider}/oauth/callback"
+            data = ms_oauth_exchange(settings, code=code, redirect_uri=redirect)
+            credentials = {"access_token": data.get("access_token"), "refresh_token": data.get("refresh_token")}
+            external_id = "default"
+            display = provider
+        elif provider in {"google_drive", "gmail"}:
+            redirect = settings.google_redirect_uri or f"{settings.api_base_url}/v1/connectors/{provider}/oauth/callback"
+            data = google_oauth_exchange(settings, code=code, redirect_uri=redirect)
+            credentials = {"access_token": data.get("access_token"), "refresh_token": data.get("refresh_token")}
+            external_id = "default"
+            display = provider
+        elif provider == "jira":
+            data = jira_oauth_exchange(settings, code=code)
+            credentials = {
+                "access_token": data.get("access_token"),
+                "refresh_token": data.get("refresh_token"),
+                "base_url": settings.jira_base_url,
+            }
+            external_id = settings.jira_cloud_id or "default"
+            display = "Jira"
         else:
             raise HTTPException(status_code=400, detail=f"OAuth not implemented for {provider}")
         connect_account(
@@ -118,6 +176,7 @@ def oauth_callback(
             display_name=display,
             external_account_id=str(external_id),
             user_id=None,
+            tenant_id=tenant_id,
         )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -129,11 +188,11 @@ def sync_account(
     account_id: UUID,
     db: DbSession,
     settings: AppSettings,
-    _: Annotated[User, Depends(require_roles(Role.admin))],
+    user: Annotated[User, Depends(require_roles(Role.admin))],
     limit: int = 50,
 ):
     account = db.get(ConnectorAccount, account_id)
-    if not account:
+    if not account or account.tenant_id != user.tenant_id:
         raise HTTPException(status_code=404, detail="Connector account not found")
     try:
         result = run_sync(db, account, settings, limit=limit)

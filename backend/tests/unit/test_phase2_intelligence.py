@@ -60,7 +60,7 @@ def test_keyword_and_hybrid_search(db, seeded_db, test_settings):
     assert kw
 
     class FakeVector:
-        def search(self, *, vector, limit=10, project_id=None):
+        def search(self, *, vector, limit=10, project_id=None, tenant_id=None):
             return []
 
     results = hybrid_search(

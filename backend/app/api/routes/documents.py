@@ -41,6 +41,7 @@ async def upload_document(
 
     document = Document(
         id=doc_id,
+        tenant_id=user.tenant_id,
         title=title or filename,
         filename=filename,
         content_type=content_type,
@@ -49,11 +50,12 @@ async def upload_document(
         uploaded_by=user.id,
         visibility=visibility,
         text_preview=text[:50_000],
+        search_vector=f"{title or filename} {text}"[:10_000],
     )
     db.add(document)
     db.flush()
 
-    job = IngestJob(job_type="document", status=JobStatus.pending, document_id=document.id)
+    job = IngestJob(job_type="document", status=JobStatus.pending, document_id=document.id, tenant_id=user.tenant_id)
     db.add(job)
     db.commit()
     db.refresh(document)
@@ -66,8 +68,14 @@ async def upload_document(
 
 
 @router.get("/v1/documents", response_model=list[DocumentOut])
-def list_documents(db: DbSession, _: CurrentUser):
-    return db.query(Document).order_by(Document.created_at.desc()).limit(100).all()
+def list_documents(db: DbSession, user: CurrentUser):
+    return (
+        db.query(Document)
+        .filter(Document.tenant_id == user.tenant_id)
+        .order_by(Document.created_at.desc())
+        .limit(100)
+        .all()
+    )
 
 
 @router.get("/v1/documents/{document_id}", response_model=DocumentOut)

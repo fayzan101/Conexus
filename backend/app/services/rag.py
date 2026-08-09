@@ -16,11 +16,14 @@ def filter_hits_by_acl(
     hits: list[dict],
     *,
     user_id: UUID | None,
+    tenant_id: str | None = None,
 ) -> list[dict]:
-    """Drop private evidence the current user cannot access."""
+    """Drop private evidence and cross-tenant payloads the current user cannot access."""
     results = []
     for hit in hits:
         payload = hit.get("payload") or {}
+        if tenant_id and payload.get("tenant_id") and payload.get("tenant_id") != tenant_id:
+            continue
         visibility = payload.get("visibility", "org")
         if visibility == "private":
             doc_id = payload.get("document_id")
@@ -28,6 +31,8 @@ def filter_hits_by_acl(
                 continue
             doc = db.get(Document, UUID(str(doc_id)))
             if not doc or doc.uploaded_by != user_id:
+                continue
+            if tenant_id and doc.tenant_id != tenant_id:
                 continue
         results.append(hit)
     return results
@@ -48,6 +53,7 @@ def hits_to_search_results(hits: list[dict]) -> list[dict]:
                     "title": payload.get("title"),
                     "type": payload.get("type"),
                     "uri": None,
+                    "tenant_id": payload.get("tenant_id"),
                 },
             }
         )
@@ -62,16 +68,18 @@ def semantic_search(
     user_id: UUID | None,
     limit: int = 10,
     project_id: UUID | None = None,
+    tenant_id: str | None = None,
     vector_store: VectorStore | None = None,
 ) -> list[dict]:
+    tenant_id = tenant_id or settings.default_tenant_id
     embedder = get_embedder(settings)
     vector = embedder.embed([query])[0]
     store = vector_store or VectorStore(settings)
-    raw_hits = store.search(vector=vector, limit=limit * 2, project_id=project_id)
-    allowed = filter_hits_by_acl(db, raw_hits, user_id=user_id)[:limit]
+    raw_hits = store.search(vector=vector, limit=limit * 2, project_id=project_id, tenant_id=tenant_id)
+    allowed = filter_hits_by_acl(db, raw_hits, user_id=user_id, tenant_id=tenant_id)[:limit]
     results = hits_to_search_results(allowed)
 
-    db.add(QueryLog(user_id=user_id, query_type="search", query_text=query))
+    db.add(QueryLog(user_id=user_id, tenant_id=tenant_id, query_type="search", query_text=query))
     db.commit()
     return results
 
@@ -82,18 +90,21 @@ def grounded_answer(
     *,
     query: str,
     user_id: UUID,
+    tenant_id: str | None = None,
     vector_store: VectorStore | None = None,
     llm_fn=None,
 ) -> dict:
+    tenant_id = tenant_id or settings.default_tenant_id
     hits = semantic_search(
         db,
         settings,
         query=query,
         user_id=user_id,
         limit=5,
+        tenant_id=tenant_id,
         vector_store=vector_store,
     )
-    db.add(QueryLog(user_id=user_id, query_type="chat", query_text=query))
+    db.add(QueryLog(user_id=user_id, tenant_id=tenant_id, query_type="chat", query_text=query))
     db.commit()
 
     if not hits:
@@ -122,7 +133,6 @@ def grounded_answer(
     content = llm_answer or stub_synthesize(query=query, hits=hits)
     faithfulness = check_faithfulness(content, len(hits))
     if not faithfulness["ok"]:
-        # Soft-repair: append mandatory citations from evidence order
         missing = " ".join(f"[{i}]" for i in range(1, min(3, len(hits)) + 1))
         content = f"{content.rstrip()} {missing}".strip()
         faithfulness = check_faithfulness(content, len(hits))

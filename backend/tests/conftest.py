@@ -27,6 +27,10 @@ def test_settings() -> Settings:
         queue_backend="memory",
         queue_inline=True,
         connector_auto_ingest=False,
+        event_bus_backend="memory",
+        default_tenant_id="default",
+        hybrid_rerank=True,
+        hybrid_graph_hops=0,
         dev_admin_email="admin@example.com",
         dev_admin_password="admin123",
         dev_user_email="user@example.com",
@@ -128,13 +132,14 @@ def user_headers(user_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {user_token}"}
 
 
-def make_user(db: Session, email: str, password: str, role: Role = Role.employee) -> User:
+def make_user(db: Session, email: str, password: str, role: Role = Role.employee, tenant_id: str = "default") -> User:
     user = User(
         email=email,
         full_name=email.split("@")[0],
         hashed_password=hash_password(password),
         role=role,
         is_active=True,
+        tenant_id=tenant_id,
     )
     db.add(user)
     db.commit()

@@ -64,7 +64,7 @@ def send_message(
     db.add(user_msg)
     db.commit()
 
-    answer = grounded_answer(db, settings, query=payload.content, user_id=user.id)
+    answer = grounded_answer(db, settings, query=payload.content, user_id=user.id, tenant_id=user.tenant_id)
     assistant = ChatMessage(
         session_id=session_id,
         role="assistant",

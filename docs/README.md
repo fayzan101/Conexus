@@ -90,6 +90,8 @@ Central index for product, architecture, API, security, and operations documenta
 | [roadmap/production-maturity-plan.md](roadmap/production-maturity-plan.md) | Phases 4–8 to 100% production maturity |
 | [roadmap/phase-4-plan.md](roadmap/phase-4-plan.md) | Phase 4 plan |
 | [roadmap/phase-4-pr.md](roadmap/phase-4-pr.md) | Phase 4 PR description |
+| [roadmap/phase-5-plan.md](roadmap/phase-5-plan.md) | Phase 5 plan |
+| [roadmap/phase-5-pr.md](roadmap/phase-5-pr.md) | Phase 5 PR description |
 
 ---
 

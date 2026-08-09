@@ -14,10 +14,12 @@ class FakeVectorStore:
         self.corpus = corpus
         self.dim = dim
 
-    def search(self, *, vector, limit=10, project_id=None):
+    def search(self, *, vector, limit=10, project_id=None, tenant_id=None):
         scored = []
         for item in self.corpus:
             if project_id and item["payload"].get("project_id") != str(project_id):
+                continue
+            if tenant_id and item["payload"].get("tenant_id") and item["payload"].get("tenant_id") != tenant_id:
                 continue
             score = sum(x * y for x, y in zip(vector, item["vector"]))
             scored.append({"id": item["id"], "score": score, "payload": item["payload"]})

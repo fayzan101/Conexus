@@ -57,12 +57,14 @@ class DecisionStatus(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("tenant_id", "email", name="uq_users_tenant_email"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    email: Mapped[str] = mapped_column(String(320), index=True)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    idp_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
+    idp_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     role: Mapped[Role] = mapped_column(_str_enum(Role), default=Role.employee)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -77,6 +79,7 @@ class InviteToken(Base):
     __tablename__ = "invite_tokens"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     email: Mapped[str] = mapped_column(String(320), index=True)
     role: Mapped[Role] = mapped_column(_str_enum(Role), default=Role.employee)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
@@ -88,9 +91,11 @@ class InviteToken(Base):
 
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_projects_tenant_name"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    name: Mapped[str] = mapped_column(String(255), index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -99,6 +104,7 @@ class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     title: Mapped[str] = mapped_column(String(512))
     filename: Mapped[str] = mapped_column(String(512))
     content_type: Mapped[str] = mapped_column(String(128), default="application/octet-stream")
@@ -108,6 +114,7 @@ class Document(Base):
     uploaded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     visibility: Mapped[str] = mapped_column(String(32), default="org")
     text_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    search_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     uploaded_by_user: Mapped[User | None] = relationship(back_populates="documents")
@@ -133,6 +140,7 @@ class Meeting(Base):
     __tablename__ = "meetings"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     title: Mapped[str] = mapped_column(String(512))
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     transcript: Mapped[str] = mapped_column(Text)
@@ -147,6 +155,7 @@ class IngestJob(Base):
     __tablename__ = "ingest_jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     job_type: Mapped[str] = mapped_column(String(64))
     status: Mapped[JobStatus] = mapped_column(_str_enum(JobStatus), default=JobStatus.pending)
     document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"), nullable=True)
@@ -167,6 +176,7 @@ class Decision(Base):
     __tablename__ = "decisions"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     title: Mapped[str] = mapped_column(String(512))
     context: Mapped[str | None] = mapped_column(Text, nullable=True)
     evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -214,6 +224,7 @@ class QueryLog(Base):
     __tablename__ = "query_logs"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     query_type: Mapped[str] = mapped_column(String(32))
     query_text: Mapped[str] = mapped_column(Text)
@@ -222,9 +233,10 @@ class QueryLog(Base):
 
 class ConnectorAccount(Base):
     __tablename__ = "connector_accounts"
-    __table_args__ = (UniqueConstraint("provider", "external_account_id"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "provider", "external_account_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     provider: Mapped[str] = mapped_column(String(64), index=True)
     external_account_id: Mapped[str] = mapped_column(String(255), default="default")
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -382,3 +394,62 @@ class ResearchReport(Base):
     executive_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EntityRecord(Base):
+    """Canonical person/project entity for resolution within a tenant."""
+
+    __tablename__ = "entity_records"
+    __table_args__ = (UniqueConstraint("tenant_id", "entity_type", "canonical_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    entity_type: Mapped[str] = mapped_column(String(32), index=True)  # person | project
+    canonical_key: Mapped[str] = mapped_column(String(255))
+    display_name: Mapped[str] = mapped_column(String(255))
+    aliases: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    merged_into_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("entity_records.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EntityMergeAudit(Base):
+    __tablename__ = "entity_merge_audits"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    source_entity_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("entity_records.id"))
+    target_entity_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("entity_records.id"))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PendingMemoryLink(Base):
+    __tablename__ = "pending_memory_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    link_type: Mapped[str] = mapped_column(String(64))  # decision|project
+    target_id: Mapped[str] = mapped_column(String(255))
+    source_ref: Mapped[str] = mapped_column(String(255))
+    source_system: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    status: Mapped[str] = mapped_column(String(32), default="proposed")  # proposed|confirmed|rejected
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class TenantCryptoKey(Base):
+    """Envelope encryption key registry (DEK wrapped by app secret / KMS placeholder)."""
+
+    __tablename__ = "tenant_crypto_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    wrapped_dek: Mapped[str] = mapped_column(Text)
+    algorithm: Mapped[str] = mapped_column(String(64), default="aes-256-gcm")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

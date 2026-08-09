@@ -42,7 +42,7 @@ def login(payload: LoginRequest, db: DbSession, settings: AppSettings):
                 "Use POST /v1/auth/oidc/exchange with an IdP token."
             ),
         )
-    user = authenticate_user(db, payload.email, payload.password)
+    user = authenticate_user(db, payload.email, payload.password, tenant_id=settings.default_tenant_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     access = create_access_token(str(user.id), user.role.value, settings)

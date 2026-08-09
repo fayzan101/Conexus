@@ -76,7 +76,7 @@ def process_document_job(
         graph.upsert_node(
             "Document",
             str(document.id),
-            {"title": document.title, "source_system": document.source_system},
+            {"title": document.title, "source_system": document.source_system, "tenant_id": document.tenant_id},
         )
         if document.project_id:
             graph.upsert_node(
@@ -124,6 +124,7 @@ def process_document_job(
                     "project_id": str(document.project_id) if document.project_id else None,
                     "visibility": document.visibility,
                     "type": "document",
+                    "tenant_id": document.tenant_id,
                 },
             )
 
@@ -191,7 +192,7 @@ def process_meeting_job(
         embedder = get_embedder(settings)
         vectors = embedder.embed(chunks) if chunks else []
 
-        graph.upsert_node("Meeting", str(meeting.id), {"title": meeting.title})
+        graph.upsert_node("Meeting", str(meeting.id), {"title": meeting.title, "tenant_id": meeting.tenant_id})
         if meeting.project_id:
             graph.upsert_node(
                 "Project",
@@ -228,6 +229,7 @@ def process_meeting_job(
                     "project_id": str(meeting.project_id) if meeting.project_id else None,
                     "visibility": "org",
                     "type": "meeting",
+                    "tenant_id": meeting.tenant_id,
                 },
             )
 

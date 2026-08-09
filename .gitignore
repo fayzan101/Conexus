@@ -1,8 +1,6 @@
 # Git ignore
 
 # Env & secrets
-.env
-.env.local
 .env.*.local
 *.pem
 *.key
@@ -29,7 +27,6 @@ coverage/
 
 # IDE / OS
 .idea/
-.vscode/
 *.swp
 .DS_Store
 Thumbs.db
@@ -42,3 +39,4 @@ tmp/
 
 # Docker volumes (if bind-mounted locally)
 .docker-data/
+config.bat

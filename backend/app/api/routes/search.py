@@ -21,6 +21,7 @@ def search(payload: SearchRequest, db: DbSession, user: CurrentUser, settings: A
             user_id=user.id,
             limit=payload.limit,
             project_id=project_id,
+            tenant_id=user.tenant_id,
             source_system=filters.source_system if filters else None,
             date_from=filters.date_from if filters else None,
             date_to=filters.date_to if filters else None,
@@ -35,6 +36,7 @@ def search(payload: SearchRequest, db: DbSession, user: CurrentUser, settings: A
             user_id=user.id,
             limit=payload.limit,
             project_id=project_id,
+            tenant_id=user.tenant_id,
         )
     return SearchResponse(results=results)
 
