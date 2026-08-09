@@ -11,6 +11,8 @@ type Message = {
   content: string;
   confidence?: number | null;
   sources?: Array<{ title?: string; snippet?: string; score?: number }>;
+  blocked_reason?: string | null;
+  acl_summary?: { blocked?: number; blocked_reasons?: string[] } | null;
 };
 
 export default function ChatPage() {
@@ -68,6 +70,9 @@ export default function ChatPage() {
               <p>{m.content}</p>
               {m.role === "assistant" && m.confidence != null && (
                 <p className="mt-2 text-xs opacity-80">Confidence: {m.confidence}</p>
+              )}
+              {m.role === "assistant" && m.blocked_reason && (
+                <p className="mt-2 text-xs text-red-800">{m.blocked_reason}</p>
               )}
             </div>
             {m.sources && m.sources.length > 0 && (

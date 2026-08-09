@@ -148,3 +148,7 @@ class GraphStore:
                     }
                 )
             return nodes
+
+    def delete_node(self, node_id: str) -> None:
+        with self.driver.session() as session:
+            session.run("MATCH (n {id: $id}) DETACH DELETE n", id=node_id)

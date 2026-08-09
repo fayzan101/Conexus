@@ -27,6 +27,24 @@ jobs:
           DATABASE_URL: "sqlite+pysqlite:///:memory:"
           EMBEDDING_PROVIDER: hash
           LLM_API_KEY: ""
+          ENVIRONMENT: test
+
+  appsec:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install security tools
+        run: pip install bandit pip-audit
+      - name: Bandit SAST
+        run: bandit -q -r app -x tests -ll
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt || true
 
   frontend:
     runs-on: ubuntu-latest

@@ -68,3 +68,13 @@ class VectorStore:
             }
             for hit in hits
         ]
+
+    def delete(self, *, point_id: str) -> None:
+        try:
+            self.ensure_collection()
+            self.client.delete(
+                collection_name=self.collection,
+                points_selector=qm.PointIdsList(points=[point_id]),
+            )
+        except Exception:
+            pass

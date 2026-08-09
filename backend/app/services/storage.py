@@ -37,3 +37,9 @@ class ObjectStorage:
     def get_bytes(self, key: str) -> bytes:
         obj = self.client.get_object(Bucket=self.bucket, Key=key)
         return obj["Body"].read()
+
+    def delete(self, key: str) -> None:
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=key)
+        except Exception:
+            pass

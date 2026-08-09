@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db.models import Document, DocumentChunk, QueryLog
-from app.services.rag import filter_hits_by_acl, hits_to_search_results, semantic_search
+from app.services.rag import hits_to_search_results, semantic_search
 from app.services.vector import VectorStore
 
 
@@ -181,7 +181,7 @@ def hybrid_search(
     vector_store: VectorStore | None = None,
 ) -> list[dict]:
     tenant_id = tenant_id or "default"
-    vector_hits = semantic_search(
+    search_out = semantic_search(
         db,
         settings,
         query=query,
@@ -191,6 +191,7 @@ def hybrid_search(
         tenant_id=tenant_id,
         vector_store=vector_store,
     )
+    vector_hits = search_out["results"] if isinstance(search_out, dict) else search_out
     kw_raw = keyword_search(
         db,
         query=query,
@@ -199,7 +200,9 @@ def hybrid_search(
         source_system=source_system,
         tenant_id=tenant_id,
     )
-    kw_allowed = filter_hits_by_acl(db, kw_raw, user_id=user_id, tenant_id=tenant_id)
+    from app.services.abac import filter_hits_with_reasons
+
+    kw_allowed, kw_blocked = filter_hits_with_reasons(db, kw_raw, user_id=user_id, tenant_id=tenant_id)
     kw_results = hits_to_search_results(kw_allowed)
 
     merged: dict[str, dict] = {}

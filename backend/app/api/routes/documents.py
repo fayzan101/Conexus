@@ -21,6 +21,8 @@ async def upload_document(
     title: str | None = Form(default=None),
     project_id: UUID | None = Form(default=None),
     visibility: str = Form(default="org"),
+    classification: str = Form(default="internal"),
+    region: str | None = Form(default=None),
 ):
     raw = await file.read()
     if not raw:
@@ -49,6 +51,8 @@ async def upload_document(
         project_id=project_id,
         uploaded_by=user.id,
         visibility=visibility,
+        classification=classification,
+        region=region,
         text_preview=text[:50_000],
         search_vector=f"{title or filename} {text}"[:10_000],
     )

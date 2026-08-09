@@ -18,6 +18,7 @@ from app.api.routes import (
     os_platform,
     projects,
     search,
+    security,
     timeline,
     users,
 )
@@ -71,6 +72,7 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     app.include_router(timeline.router)
     app.include_router(intelligence.router)
     app.include_router(knowledge.router)
+    app.include_router(security.router)
     app.include_router(os_platform.router)
     app.include_router(metrics.router)
     return app
