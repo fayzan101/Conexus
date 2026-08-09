@@ -21,11 +21,12 @@ def ingest_transcript(
         project_id=payload.project_id,
         occurred_at=payload.occurred_at,
         created_by=user.id,
+        tenant_id=user.tenant_id,
     )
     db.add(meeting)
     db.flush()
 
-    job = IngestJob(job_type="meeting", status=JobStatus.pending, meeting_id=meeting.id)
+    job = IngestJob(job_type="meeting", status=JobStatus.pending, meeting_id=meeting.id, tenant_id=user.tenant_id)
     db.add(job)
     db.commit()
     db.refresh(meeting)
