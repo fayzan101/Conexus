@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     environment: str = "local"
     secret_key: str = "dev-secret-change-me-in-production"
     cors_origins: str = "http://localhost:3000"
+    default_tenant_id: str = "default"
 
     database_url: str = "postgresql+psycopg://eb:eb@localhost:5432/enterprise_brain"
 
@@ -29,9 +30,13 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
     queue_backend: str = "memory"  # memory | redis
-    queue_inline: bool = True  # process jobs in-request (local/tests); false in pilot workers
+    queue_inline: bool = True
     worker_poll_seconds: float = 1.0
     connector_auto_ingest: bool = True
+    event_bus_backend: str = "memory"  # memory | kafka
+    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_topic_ingest: str = "eb.ingest.events"
+    queue_max_depth: int = 10_000
 
     object_store_endpoint: str = "http://localhost:9000"
     object_store_access_key: str = "minioadmin"
@@ -40,7 +45,7 @@ class Settings(BaseSettings):
     object_store_region: str = "us-east-1"
     object_store_use_ssl: bool = False
 
-    auth_provider: str = "dev"  # dev | oidc
+    auth_provider: str = "dev"
     auth_issuer: str = ""
     auth_audience: str = ""
     auth_jwks_url: str = ""
@@ -58,10 +63,15 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4o-mini"
     llm_base_url: str = "https://api.openai.com/v1"
-    require_llm_key: bool = False  # set true in staging/prod via env
-    embedding_provider: str = "hash"  # hash | openai
+    require_llm_key: bool = False
+    embedding_provider: str = "hash"
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 384
+
+    hybrid_graph_hops: int = 1
+    hybrid_graph_limit: int = 8
+    hybrid_rerank: bool = True
+    auto_link_min_confidence: float = 0.55
 
     slack_client_id: str = ""
     slack_client_secret: str = ""
@@ -72,6 +82,21 @@ class Settings(BaseSettings):
     github_client_secret: str = ""
     github_webhook_secret: str = ""
     github_redirect_uri: str = ""
+
+    ms_client_id: str = ""
+    ms_client_secret: str = ""
+    ms_tenant_id: str = "common"
+    ms_redirect_uri: str = ""
+
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
+
+    jira_client_id: str = ""
+    jira_client_secret: str = ""
+    jira_redirect_uri: str = ""
+    jira_cloud_id: str = ""
+    jira_base_url: str = ""
 
     ff_graphql: bool = False
     ff_connectors: bool = False

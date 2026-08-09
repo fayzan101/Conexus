@@ -45,13 +45,15 @@ class VectorStore:
         vector: list[float],
         limit: int = 10,
         project_id: UUID | None = None,
+        tenant_id: str | None = None,
     ) -> list[dict]:
         self.ensure_collection()
-        query_filter = None
+        must = []
         if project_id:
-            query_filter = qm.Filter(
-                must=[qm.FieldCondition(key="project_id", match=qm.MatchValue(value=str(project_id)))]
-            )
+            must.append(qm.FieldCondition(key="project_id", match=qm.MatchValue(value=str(project_id))))
+        if tenant_id:
+            must.append(qm.FieldCondition(key="tenant_id", match=qm.MatchValue(value=tenant_id)))
+        query_filter = qm.Filter(must=must) if must else None
         hits = self.client.search(
             collection_name=self.collection,
             query_vector=vector,

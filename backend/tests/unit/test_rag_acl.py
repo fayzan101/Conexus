@@ -8,7 +8,7 @@ class FakeVectorStore:
     def __init__(self, hits):
         self.hits = hits
 
-    def search(self, *, vector, limit=10, project_id=None):
+    def search(self, *, vector, limit=10, project_id=None, tenant_id=None):
         return self.hits[:limit]
 
 

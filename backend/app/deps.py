@@ -46,12 +46,15 @@ def create_refresh_token(subject: str, settings: Settings) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
 
-def get_user_by_email(db: Session, email: str) -> User | None:
-    return db.query(User).filter(User.email == email).first()
+def get_user_by_email(db: Session, email: str, tenant_id: str | None = None) -> User | None:
+    q = db.query(User).filter(User.email == email)
+    if tenant_id:
+        q = q.filter(User.tenant_id == tenant_id)
+    return q.first()
 
 
-def authenticate_user(db: Session, email: str, password: str) -> User | None:
-    user = get_user_by_email(db, email)
+def authenticate_user(db: Session, email: str, password: str, tenant_id: str | None = None) -> User | None:
+    user = get_user_by_email(db, email, tenant_id=tenant_id)
     if not user or not user.is_active:
         return None
     if not verify_password(password, user.hashed_password):
@@ -107,15 +110,15 @@ def decode_oidc_token(token: str, settings: Settings) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="Invalid OIDC token") from exc
 
 
-def upsert_oidc_user(db: Session, claims: dict[str, Any]) -> User:
+def upsert_oidc_user(db: Session, claims: dict[str, Any], tenant_id: str = "default") -> User:
     sub = claims.get("sub")
     email = (claims.get("email") or claims.get("preferred_username") or "").lower()
     if not sub or not email:
         raise HTTPException(status_code=401, detail="OIDC token missing sub/email")
 
-    user = db.query(User).filter(User.idp_subject == sub).first()
+    user = db.query(User).filter(User.idp_subject == sub, User.tenant_id == tenant_id).first()
     if not user:
-        user = get_user_by_email(db, email)
+        user = get_user_by_email(db, email, tenant_id=tenant_id)
     if not user:
         user = User(
             email=email,
@@ -124,6 +127,7 @@ def upsert_oidc_user(db: Session, claims: dict[str, Any]) -> User:
             hashed_password=None,
             role=Role.employee,
             is_active=True,
+            tenant_id=tenant_id,
         )
         db.add(user)
     else:
@@ -208,6 +212,7 @@ def create_invite(
         role=role,
         token_hash=hash_invite_token(raw),
         invited_by=invited_by,
+        tenant_id=settings.default_tenant_id,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.auth_invite_expire_hours),
     )
     db.add(invite)
@@ -227,7 +232,7 @@ def accept_invite(db: Session, *, raw_token: str, password: str, full_name: str 
     if expires < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Invite expired")
 
-    user = get_user_by_email(db, invite.email)
+    user = get_user_by_email(db, invite.email, tenant_id=invite.tenant_id)
     if not user:
         user = User(
             email=invite.email,
@@ -235,6 +240,7 @@ def accept_invite(db: Session, *, raw_token: str, password: str, full_name: str 
             hashed_password=hash_password(password),
             role=invite.role,
             is_active=True,
+            tenant_id=invite.tenant_id,
         )
         db.add(user)
     else:
