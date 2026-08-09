@@ -4,9 +4,10 @@ import base64
 import hashlib
 import hmac
 import secrets
-import xml.etree.ElementTree as ET
 from typing import Any
 from urllib.parse import urlencode
+
+from defusedxml import ElementTree as ET
 
 from app.config import Settings
 from app.db.models import Role, User
