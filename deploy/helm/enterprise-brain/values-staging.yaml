@@ -1,0 +1,13 @@
+environment: staging
+deployMode: saas
+api:
+  replicaCount: 2
+worker:
+  replicaCount: 2
+web:
+  replicaCount: 2
+ingress:
+  host: brain.staging.example.internal
+env:
+  SLO_SEARCH_P95_MS: "800"
+  SLO_CHAT_P95_MS: "2500"

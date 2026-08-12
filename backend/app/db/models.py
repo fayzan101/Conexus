@@ -513,3 +513,76 @@ class RetentionPolicy(Base):
     resource_type: Mapped[str] = mapped_column(String(64), default="document")
     retain_days: Mapped[int] = mapped_column(Integer, default=365)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TenantLlmQuota(Base):
+    """Per-tenant daily LLM token budget and preferred model route."""
+
+    __tablename__ = "tenant_llm_quotas"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    daily_token_limit: Mapped[int] = mapped_column(Integer, default=100_000)
+    tokens_used_today: Mapped[int] = mapped_column(Integer, default=0)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    model_route: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class LlmUsageEvent(Base):
+    __tablename__ = "llm_usage_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    task: Mapped[str] = mapped_column(String(32), default="chat")
+    model: Mapped[str] = mapped_column(String(128), default="")
+    tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cached: Mapped[bool] = mapped_column(Boolean, default=False)
+    blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BackupDrill(Base):
+    """Recorded backup/restore drills for RPO/RTO evidence."""
+
+    __tablename__ = "backup_drills"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    environment: Mapped[str] = mapped_column(String(32), default="staging")
+    store: Mapped[str] = mapped_column(String(32))  # postgres | neo4j | qdrant | object
+    rpo_hours: Mapped[float] = mapped_column(Float, default=24.0)
+    rto_hours: Mapped[float] = mapped_column(Float, default=4.0)
+    status: Mapped[str] = mapped_column(String(32), default="passed")  # passed | failed | skipped
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    performed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    performed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DeployProof(Base):
+    """Evidence that a deploy mode (saas / single-tenant / private VPC) was exercised."""
+
+    __tablename__ = "deploy_proofs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    deploy_mode: Mapped[str] = mapped_column(String(32), index=True)
+    environment: Mapped[str] = mapped_column(String(32), default="staging")
+    status: Mapped[str] = mapped_column(String(32), default="proven")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proven_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    proven_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChaosTest(Base):
+    __tablename__ = "chaos_tests"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    component: Mapped[str] = mapped_column(String(64))
+    environment: Mapped[str] = mapped_column(String(32), default="staging")
+    status: Mapped[str] = mapped_column(String(32), default="passed")
+    steps: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    performed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    performed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
