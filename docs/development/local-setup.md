@@ -74,8 +74,13 @@ make web
 
 ```bash
 curl http://localhost:8000/healthz
-curl http://localhost:8000/readyz
+curl http://localhost:8000/livez
+curl http://localhost:8000/metrics
 ```
+
+Ops console (admin): http://localhost:3000/ops  
+Helm chart: `deploy/helm/enterprise-brain`  
+Staging smoke: `python backend/scripts/staging_smoke.py`
 
 ## Troubleshooting
 

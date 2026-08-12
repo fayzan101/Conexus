@@ -119,6 +119,9 @@ def filter_hits_with_reasons(
         if decision.allowed:
             allowed.append(hit)
         else:
+            from app.services.observability import record_acl_drop
+
+            record_acl_drop(decision.reason or "unknown")
             blocked.append(
                 {
                     "id": str(hit.get("id")),

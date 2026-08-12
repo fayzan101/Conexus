@@ -1,0 +1,42 @@
+groups:
+  - name: enterprise-brain-slo
+    interval: 30s
+    rules:
+      - alert: SearchLatencyBudgetBurn
+        expr: eb_search_duration_ms_p95 > 800
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: Search P95 exceeded SLO budget
+          runbook: docs/operations/runbook.md#api-unhealthy
+      - alert: ChatLatencyBudgetBurn
+        expr: eb_chat_duration_ms_p95 > 2500
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Chat P95 exceeded SLO budget
+      - alert: ApiErrorRateHigh
+        expr: eb_http_errors_total / clamp_min(eb_http_requests_total, 1) > 0.02
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: API 5xx rate above 2% error budget
+          runbook: docs/operations/runbook.md#api-unhealthy
+      - alert: IngestQueueLag
+        expr: eb_ingest_queue_depth_p95 > 1000
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Ingest queue depth is high
+          runbook: docs/operations/runbook.md#ingest-backlog
+      - alert: LlmBudgetBlocked
+        expr: increase(eb_llm_budget_blocked_total[15m]) > 20
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Tenants are hitting LLM token quotas

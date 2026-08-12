@@ -8,7 +8,9 @@ from app.config import Settings
 from app.db.models import QueryLog
 from app.services.abac import filter_hits_with_reasons
 from app.services.embeddings import get_embedder
-from app.services.llm import check_faithfulness, stub_synthesize, synthesize_with_llm
+from app.services.llm import check_faithfulness, stub_synthesize
+from app.services.llm_budget import synthesize_with_budget
+from app.services.observability import record_grounded, start_span
 from app.services.vector import VectorStore
 
 
@@ -92,15 +94,16 @@ def grounded_answer(
     llm_fn=None,
 ) -> dict:
     tenant_id = tenant_id or settings.default_tenant_id
-    search = semantic_search(
-        db,
-        settings,
-        query=query,
-        user_id=user_id,
-        limit=5,
-        tenant_id=tenant_id,
-        vector_store=vector_store,
-    )
+    with start_span("rag.grounded_answer", tenant_id=tenant_id):
+        search = semantic_search(
+            db,
+            settings,
+            query=query,
+            user_id=user_id,
+            limit=5,
+            tenant_id=tenant_id,
+            vector_store=vector_store,
+        )
     hits = search["results"]
     blocked = search["blocked"]
     acl_summary = search["acl_summary"]
@@ -115,6 +118,7 @@ def grounded_answer(
                 f"({', '.join(acl_summary['blocked_reasons'])}). "
                 "You may lack clearance, region, or project membership."
             )
+        record_grounded(False)
         return {
             "content": blocked_reason
             or (
@@ -138,7 +142,9 @@ def grounded_answer(
     if llm_fn is not None:
         llm_answer = llm_fn(settings, query=query, evidence=evidence)
     else:
-        llm_answer = synthesize_with_llm(settings, query=query, evidence=evidence)
+        llm_answer = synthesize_with_budget(
+            db, settings, query=query, evidence=evidence, tenant_id=tenant_id, task="chat"
+        )
 
     content = llm_answer or stub_synthesize(query=query, hits=hits)
     faithfulness = check_faithfulness(content, len(hits))
@@ -158,6 +164,7 @@ def grounded_answer(
         for h in hits
     ]
     avg_score = sum(h["score"] for h in hits) / len(hits)
+    record_grounded(bool(sources))
 
     return {
         "content": content,

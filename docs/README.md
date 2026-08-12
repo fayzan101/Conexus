@@ -94,6 +94,8 @@ Central index for product, architecture, API, security, and operations documenta
 | [roadmap/phase-5-pr.md](roadmap/phase-5-pr.md) | Phase 5 PR description |
 | [roadmap/phase-6-plan.md](roadmap/phase-6-plan.md) | Phase 6 plan |
 | [roadmap/phase-6-pr.md](roadmap/phase-6-pr.md) | Phase 6 PR description |
+| [roadmap/phase-7-plan.md](roadmap/phase-7-plan.md) | Phase 7 plan |
+| [roadmap/phase-7-pr.md](roadmap/phase-7-pr.md) | Phase 7 PR description |
 
 ---
 

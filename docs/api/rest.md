@@ -122,9 +122,32 @@ SSO may terminate at IdP; API validates JWT.
 
 ---
 
+## Platform ops (Phase 7)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/livez` | Liveness alias of `/healthz` |
+| GET | `/metrics` | Prometheus scrape |
+| GET | `/v1/ops/golden-signals` | Latency, traffic, errors, saturation, domain metrics |
+| GET | `/v1/ops/slo` | SLO budgets vs observed (pageable flag) |
+| GET | `/v1/ops/traces` | Recent in-process spans |
+| GET | `/v1/ops/llm-budget` | Tenant LLM token quota |
+| PUT | `/v1/ops/llm-budget` | Set daily token limit / model route |
+| GET | `/v1/ops/backup` | RPO/RTO matrix + recorded drills |
+| POST | `/v1/ops/backup-drills` | Record a restore drill |
+| GET | `/v1/ops/deploy-profile` | SaaS / single-tenant / private VPC matrix |
+| POST | `/v1/ops/deploy-proofs` | Record a deploy-mode proof |
+| POST | `/v1/ops/chaos/failover` | Record a simulated failover game day |
+| GET | `/v1/ops/chaos` | List chaos tests |
+
+Ops write APIs require `admin` or `ai_administrator`.
+
+---
+
 ## Health
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/healthz` | Liveness |
-| GET | `/readyz` | Readiness (DB/graph/vector) |
+| GET | `/livez` | Liveness (K8s probe alias) |
+| GET | `/readyz` | Readiness (DB/graph/vector; Redis when `QUEUE_BACKEND=redis`) |

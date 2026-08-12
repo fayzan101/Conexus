@@ -10,6 +10,7 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/healthz")
+@router.get("/livez")
 def healthz():
     return {"status": "ok"}
 
@@ -39,5 +40,14 @@ def readyz():
     except Exception:
         checks["qdrant"] = False
 
+    if settings.queue_backend == "redis":
+        try:
+            import redis
+
+            redis.Redis.from_url(settings.redis_url).ping()
+            checks["redis"] = True
+        except Exception:
+            checks["redis"] = False
+
     ready = all(checks.values())
-    return {"ready": ready, "checks": checks}
+    return {"ready": ready, "checks": checks, "environment": settings.environment}

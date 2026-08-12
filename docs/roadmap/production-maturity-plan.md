@@ -17,8 +17,8 @@
 | L2 Pilot-ready | Real auth + 1–2 live connectors + grounded LLM | Phase 4 |
 | L3 Scale-ready | Async pipelines, hybrid search quality, multi-tenant | Phase 5 |
 | L4 Enterprise-secure | SSO/ABAC, audit, retention, private LLM path | Phase 6 |
-| L5 Ops-ready | K8s, SLOs, on-call, DR, CI/CD promotion | Phase 7 |
-| L6 Production mature | Certified controls, GA SLAs, continuous eval | Phase 8 = **100%** |
+| L5 Ops-ready | K8s, SLOs, on-call, DR, CI/CD promotion | **Done (Phase 7)** |
+| L6 Production mature | Certified controls, GA SLAs, continuous eval | Phase 8 |
 
 ```mermaid
 flowchart LR
@@ -275,8 +275,7 @@ flowchart LR
 
 ## Immediate next action
 
-1. Merge `phase-1-foundation` → `phase-2-enterprise-intelligence` → `phase-3-ai-operating-system` into `main`  
-2. Tag baseline  
-3. Open `phase-4-pilot-hardening` and execute Phase 4 slices  
+1. Merge `phase-7-platform-ops` after Phase 6  
+2. Open `phase-8-ga-maturity` and execute Phase 8 slices  
 
-Related: [phases.md](phases.md) · [mvp.md](mvp.md) · [phase-2-plan.md](phase-2-plan.md) · [phase-3-plan.md](phase-3-plan.md)
+Related: [phases.md](phases.md) · [mvp.md](mvp.md) · [phase-7-plan.md](phase-7-plan.md)

@@ -12,16 +12,17 @@
 
 ### API unhealthy
 
-1. Check `/healthz` and `/readyz`  
+1. Check `/livez` (liveness) and `/readyz`  
 2. Verify Postgres, Neo4j, Qdrant, Redis connectivity  
-3. Inspect recent deploy / config change  
-4. Roll back if needed  
+3. Inspect `GET /v1/ops/golden-signals` and `/v1/ops/slo` (pageable?)  
+4. Inspect recent deploy / config change  
+5. Roll back Helm release if needed  
 
 ### Ingest backlog
 
-1. Check worker replicas and queue depth  
-2. Inspect poison queue / failed jobs  
-3. Scale workers; pause connectors if necessary  
+1. Check worker replicas and `eb_ingest_queue_depth` / golden-signals saturation  
+2. Inspect poison queue / failed jobs (Admin UI)  
+3. Scale workers via HPA or `helm upgrade --set worker.replicaCount`; pause connectors if necessary  
 
 ### Incorrect / leaking answers
 
@@ -50,11 +51,13 @@
 
 ## Backups
 
-| Store | Cadence (suggested) |
-|-------|---------------------|
-| PostgreSQL | Daily + PITR |
-| Neo4j | Daily snapshots |
-| Object store | Versioning + cross-region/replica as required |
-| Qdrant | Snapshot before reindex |
+| Store | Cadence (suggested) | RPO / RTO (default) |
+|-------|---------------------|---------------------|
+| PostgreSQL | Daily + PITR | RPO ≤ 1h / RTO 4h |
+| Neo4j | Daily snapshots | RPO 24h / RTO 4h |
+| Object store | Versioning + replica | RPO 24h / RTO 4h |
+| Qdrant | Snapshot before reindex | RPO 24h / RTO 4h |
 
-Document restore RTOs/RPOs per customer tier.
+Record restore drills via `POST /v1/ops/backup-drills` or the `/ops` UI. Simulated failover: `POST /v1/ops/chaos/failover`.
+
+Override with `BACKUP_RPO_HOURS` / `BACKUP_RTO_HOURS`.

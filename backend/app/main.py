@@ -15,6 +15,7 @@ from app.api.routes import (
     knowledge,
     meetings,
     metrics,
+    ops,
     os_platform,
     projects,
     search,
@@ -26,6 +27,7 @@ from app.bootstrap import seed_dev_users
 from app.config import get_settings
 from app.db.migrate import ensure_schema
 from app.db.session import SessionLocal, engine
+from app.services.observability import MetricsMiddleware
 
 
 @asynccontextmanager
@@ -57,8 +59,10 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(MetricsMiddleware)
 
     app.include_router(health.router)
+    app.include_router(ops.router)
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(projects.router)

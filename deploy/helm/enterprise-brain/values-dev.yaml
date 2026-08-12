@@ -1,0 +1,16 @@
+environment: dev
+deployMode: saas
+api:
+  replicaCount: 1
+  hpa:
+    minReplicas: 1
+    maxReplicas: 3
+worker:
+  replicaCount: 1
+  hpa:
+    minReplicas: 1
+    maxReplicas: 4
+web:
+  replicaCount: 1
+ingress:
+  host: brain.dev.example.internal

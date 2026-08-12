@@ -1,0 +1,6 @@
+apiVersion: v2
+name: enterprise-brain
+description: Enterprise Brain (Cognexus) API, workers, and web
+type: application
+version: 0.7.0
+appVersion: "0.7.0"

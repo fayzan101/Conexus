@@ -1,0 +1,53 @@
+name: Promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Helm chart files
+        run: |
+          test -f deploy/helm/enterprise-brain/Chart.yaml
+          test -f deploy/helm/enterprise-brain/values-${{ github.event.inputs.environment }}.yaml
+          test -f deploy/terraform/environments/${{ github.event.inputs.environment }}.tfvars
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: helm template
+        run: |
+          helm template eb deploy/helm/enterprise-brain \
+            -f deploy/helm/enterprise-brain/values.yaml \
+            -f deploy/helm/enterprise-brain/values-${{ github.event.inputs.environment }}.yaml \
+            --set environment=${{ github.event.inputs.environment }} \
+            > /tmp/rendered.yaml
+          grep -q HorizontalPodAutoscaler /tmp/rendered.yaml
+          grep -q PodDisruptionBudget /tmp/rendered.yaml
+
+  smoke:
+    needs: package
+    runs-on: ubuntu-latest
+    if: github.event.inputs.environment != 'prod'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Document staging smoke
+        run: |
+          echo "After ArgoCD/helm promote, run:"
+          echo "  python backend/scripts/staging_smoke.py"
+          echo "against the staging API with EB_TOKEN set."
+          test -f backend/scripts/staging_smoke.py

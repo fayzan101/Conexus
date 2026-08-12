@@ -1,0 +1,60 @@
+{
+  "title": "Enterprise Brain SLOs",
+  "uid": "eb-slo",
+  "schemaVersion": 38,
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Search P95",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "eb_search_duration_ms_p95", "legendFormat": "search p95" }]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Chat P95",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "eb_chat_duration_ms_p95", "legendFormat": "chat p95" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "HTTP error rate",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 8 },
+      "targets": [{ "expr": "eb_http_errors_total / eb_http_requests_total" }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "ACL drop rate",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 8 },
+      "targets": [{ "expr": "eb_acl_drop_total" }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Grounded ratio",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 8 },
+      "targets": [{ "expr": "eb_chat_answers_total{grounded=\"true\"} / eb_chat_answers_total" }]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Ingest queue depth",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [{ "expr": "eb_ingest_queue_depth_p95", "legendFormat": "queue" }]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "LLM tokens vs cache hits",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        { "expr": "eb_llm_tokens_total", "legendFormat": "tokens" },
+        { "expr": "eb_llm_cache_hits_total", "legendFormat": "cache hits" }
+      ]
+    }
+  ]
+}

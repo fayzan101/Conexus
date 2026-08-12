@@ -1,0 +1,78 @@
+environment: dev
+deployMode: saas
+
+image:
+  registry: ghcr.io/fayzan101
+  tag: "0.7.0"
+  pullPolicy: IfNotPresent
+
+api:
+  replicaCount: 2
+  port: 8000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    minAvailable: 1
+
+worker:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 12
+    targetCPUUtilizationPercentage: 75
+  pdb:
+    minAvailable: 1
+
+web:
+  replicaCount: 2
+  port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    minAvailable: 1
+
+ingress:
+  enabled: true
+  className: nginx
+  host: brain.example.internal
+  tlsSecret: enterprise-brain-tls
+
+env:
+  LOG_LEVEL: info
+  PROMETHEUS_ENABLED: "true"
+  OTEL_ENABLED: "true"
+  LLM_CACHE_ENABLED: "true"
+  LLM_BUDGET_TOKENS_PER_DAY: "100000"
+  SLO_SEARCH_P95_MS: "800"
+  SLO_CHAT_P95_MS: "2500"
+  SLO_ERROR_RATE: "0.02"
+  BACKUP_RPO_HOURS: "24"
+  BACKUP_RTO_HOURS: "4"
