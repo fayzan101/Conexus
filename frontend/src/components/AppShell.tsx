@@ -16,6 +16,7 @@ const links = [
   { href: "/graph", label: "Graph" },
   { href: "/decisions", label: "Decisions" },
   { href: "/admin", label: "Admin" },
+  { href: "/ops", label: "Ops" },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

@@ -118,6 +118,21 @@ class Settings(BaseSettings):
     ff_research_agent: bool = False
     auto_migrate: bool = True
 
+    # Phase 7 — platform ops
+    deploy_mode: str = "saas"  # saas | single_tenant | private_vpc
+    otel_enabled: bool = False
+    otel_exporter_otlp_endpoint: str = ""
+    prometheus_enabled: bool = True
+    llm_budget_tokens_per_day: int = 100_000
+    llm_cache_enabled: bool = True
+    llm_model_summarize: str = ""
+    llm_model_rerank: str = ""
+    slo_search_p95_ms: float = 800.0
+    slo_chat_p95_ms: float = 2500.0
+    slo_error_rate: float = 0.02
+    backup_rpo_hours: float = 24.0
+    backup_rto_hours: float = 4.0
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

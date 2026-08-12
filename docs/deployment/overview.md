@@ -19,12 +19,17 @@
 
 - Docker Compose: Postgres, Neo4j, Qdrant, Redis, MinIO, API, Web  
 
-**Pilot**
+**Pilot / production**
 
-- Kubernetes namespace per env (dev/stage/prod)  
+- Kubernetes namespace per env (dev/stage/prod) via Terraform (`deploy/terraform`)  
+- Helm chart `deploy/helm/enterprise-brain` (API, worker, web, HPA, PDB, Ingress)  
+- Promote: GitHub Actions workflow `Promote` (`helm template` then ArgoCD/helm upgrade)  
 - Ingress via Nginx  
 - Managed Postgres optional  
 - Secrets via Kubernetes secrets / Vault  
+- Observability: Prometheus scrape `/metrics`, Grafana dashboard, OTEL collector  
+
+Deploy modes (`DEPLOY_MODE`): `saas` | `single_tenant` | `private_vpc`. Record proofs with `POST /v1/ops/deploy-proofs`.
 
 ---
 

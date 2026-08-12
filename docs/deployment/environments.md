@@ -28,6 +28,10 @@
 | `EMBEDDING_MODEL` | Model id |
 | `APP_BASE_URL` | Public URL |
 | `LOG_LEVEL` | info/debug |
+| `DEPLOY_MODE` | saas \| single_tenant \| private_vpc |
+| `LLM_BUDGET_TOKENS_PER_DAY` | Per-tenant daily LLM token cap |
+| `SLO_SEARCH_P95_MS` / `SLO_CHAT_P95_MS` | Latency budgets |
+| `BACKUP_RPO_HOURS` / `BACKUP_RTO_HOURS` | DR targets |
 
 Never commit real secrets. Use `.env.example` only with placeholders.
 

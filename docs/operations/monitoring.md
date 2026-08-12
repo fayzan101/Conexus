@@ -2,9 +2,12 @@
 
 ## Stack
 
-- **Prometheus** — metrics scrape  
-- **Grafana** — dashboards & alerts  
-- **OpenTelemetry** — traces across API, workers, LLM calls  
+- **Prometheus** — scrape `GET /metrics` (in-process exposition; Helm annotates API pods)
+- **Grafana** — import [deploy/observability/grafana-dashboard.json](../../deploy/observability/grafana-dashboard.json)
+- **Alertmanager** — rules in [deploy/observability/prometheus-alerts.yaml](../../deploy/observability/prometheus-alerts.yaml)
+- **OpenTelemetry** — collector config [deploy/observability/otel-collector.yaml](../../deploy/observability/otel-collector.yaml); API records in-process spans at `GET /v1/ops/traces`
+
+Live SLO snapshot: `GET /v1/ops/slo` (admin). Golden signals: `GET /v1/ops/golden-signals`.
 
 ---
 
@@ -45,5 +48,9 @@
 - Neo4j / Qdrant / Postgres down  
 - Object store failures  
 - Certificate expiry  
+- SLO budget burn (`SearchLatencyBudgetBurn`, `ApiErrorRateHigh`)  
+- LLM quota blocked spike  
+
+Ops console: `/ops` (admin). Prometheus: `/metrics`.
 
 See also [runbook.md](runbook.md).
