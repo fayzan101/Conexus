@@ -144,6 +144,27 @@ Ops write APIs require `admin` or `ai_administrator`.
 
 ---
 
+## GA maturity (Phase 8)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/status` | Public status page payload |
+| GET | `/v1/ga/readiness` | GA readiness (compliance + eval gates) |
+| POST | `/v1/ml/evals/run` | Offline calibrated model evals |
+| GET | `/v1/ml/forecast` | Query-volume forecast + backtest |
+| GET | `/v1/experts/ranked` | Feedback-calibrated expert ranking |
+| POST | `/v1/experts/feedback` | Label expert usefulness |
+| POST | `/v1/agents/run` | Allowlisted agent run (HITL for writes) |
+| POST | `/v1/agents/approvals/{id}/decide` | Approve/reject write action |
+| POST | `/v1/automation/actions` | Policy-gated automation |
+| GET | `/v1/executive/board-pack` | Exportable board KPIs |
+| POST | `/v1/evals/run` | Continuous RAG/agent/perf gates |
+| GET | `/v1/compliance/pack` | SOC2 + GDPR + pen-test pack |
+| GET/PUT | `/v1/billing` / `/v1/billing/plan` | SaaS quotas |
+| GET/POST | `/v1/sla` / `/v1/sla/measurements` | SLA definition + measurements |
+
+---
+
 ## Health
 
 | Method | Path | Description |

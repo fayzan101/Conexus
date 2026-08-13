@@ -18,7 +18,7 @@
 | L3 Scale-ready | Async pipelines, hybrid search quality, multi-tenant | Phase 5 |
 | L4 Enterprise-secure | SSO/ABAC, audit, retention, private LLM path | Phase 6 |
 | L5 Ops-ready | K8s, SLOs, on-call, DR, CI/CD promotion | **Done (Phase 7)** |
-| L6 Production mature | Certified controls, GA SLAs, continuous eval | Phase 8 |
+| L6 Production mature | Certified controls, GA SLAs, continuous eval | **Done (Phase 8 = 100%)** |
 
 ```mermaid
 flowchart LR
@@ -275,7 +275,8 @@ flowchart LR
 
 ## Immediate next action
 
-1. Merge `phase-7-platform-ops` after Phase 6  
-2. Open `phase-8-ga-maturity` and execute Phase 8 slices  
+1. Tag `v1.0.0` after Phase 8 merge  
+2. Run continuous eval gates on `main`  
+3. Schedule external SOC2 / pen-test engagement using the in-product evidence pack  
 
-Related: [phases.md](phases.md) · [mvp.md](mvp.md) · [phase-7-plan.md](phase-7-plan.md)
+Related: [phases.md](phases.md) · [phase-8-plan.md](phase-8-plan.md) · [phase-8-pr.md](phase-8-pr.md)

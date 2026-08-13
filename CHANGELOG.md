@@ -9,6 +9,7 @@ This project follows semantic versioning once the first public API is tagged.
 
 ### Added
 
+- Phase 8 GA maturity: calibrated ML evals, allowlisted agents + HITL, automation engine, executive board packs, continuous eval gates, compliance pack, billing/SLA, status page
 - Phase 7 platform operations: Helm/Kustomize, Terraform env tfvars, Prometheus/SLO APIs, LLM quotas, backup drills, ops UI, Promote workflow
 - Phase 1 implementation slices A–E with unit/API tests
   - Neon/Alembic schema bootstrap, SQLite test harness
