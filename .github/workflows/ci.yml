@@ -46,6 +46,29 @@ jobs:
       - name: Dependency audit
         run: pip-audit -r requirements.txt || true
 
+  eval-gates:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Phase 8 continuous eval gates
+        run: pytest -q tests/unit/test_phase8_ga.py -k "eval_gates_pass or compliance_pack or offline_model"
+        env:
+          AUTH_PROVIDER: dev
+          SECRET_KEY: test-secret
+          AUTO_MIGRATE: "false"
+          DATABASE_URL: "sqlite+pysqlite:///:memory:"
+          EMBEDDING_PROVIDER: hash
+          LLM_API_KEY: ""
+          ENVIRONMENT: test
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
