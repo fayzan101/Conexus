@@ -586,3 +586,173 @@ class ChaosTest(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     performed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     performed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ExpertFeedback(Base):
+    """Labeled feedback for expert ranking calibration."""
+
+    __tablename__ = "expert_feedback"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    person_key: Mapped[str] = mapped_column(String(255), index=True)
+    topic: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    label: Mapped[int] = mapped_column(Integer, default=1)  # 1 helpful, 0 not, -1 wrong
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ModelEvalRun(Base):
+    """Offline eval / backtest reports for risk & forecast models."""
+
+    __tablename__ = "model_eval_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    model_name: Mapped[str] = mapped_column(String(64), index=True)
+    metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    passed: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AgentRun(Base):
+    __tablename__ = "agent_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    agent_type: Mapped[str] = mapped_column(String(32), default="research")  # research | ops
+    problem: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="completed")
+    tools_used: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    citations: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    unsafe_attempted: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AgentApproval(Base):
+    """Human-in-the-loop gate for write/automation agent actions."""
+
+    __tablename__ = "agent_approvals"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    agent_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_runs.id"), nullable=True)
+    action_type: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending")  # pending|approved|rejected
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AutomationAction(Base):
+    __tablename__ = "automation_actions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    pattern: Mapped[str] = mapped_column(String(64))  # notify | create_ticket | update_doc_draft
+    title: Mapped[str] = mapped_column(String(512))
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="queued")  # queued|executed|blocked|failed
+    policy_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class KpiDefinition(Base):
+    __tablename__ = "kpi_definitions"
+    __table_args__ = (UniqueConstraint("tenant_id", "key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    key: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    unit: Mapped[str] = mapped_column(String(32), default="count")
+    target: Mapped[float | None] = mapped_column(Float, nullable=True)
+    audience: Mapped[str] = mapped_column(String(32), default="executive")  # executive | operator | both
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class KpiSnapshot(Base):
+    __tablename__ = "kpi_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    kpi_key: Mapped[str] = mapped_column(String(64), index=True)
+    value: Mapped[float] = mapped_column(Float, default=0.0)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EvalGateRun(Base):
+    __tablename__ = "eval_gate_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    suite: Mapped[str] = mapped_column(String(64), default="rag")  # rag | agent | perf
+    metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    passed: Mapped[bool] = mapped_column(Boolean, default=False)
+    environment: Mapped[str] = mapped_column(String(32), default="ci")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ComplianceControl(Base):
+    __tablename__ = "compliance_controls"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    framework: Mapped[str] = mapped_column(String(32), default="soc2")  # soc2 | gdpr | pentest
+    control_id: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(32), default="implemented")  # implemented|partial|planned|accepted_risk
+    evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class PenTestFinding(Base):
+    __tablename__ = "pentest_findings"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    title: Mapped[str] = mapped_column(String(255))
+    severity: Mapped[str] = mapped_column(String(16), default="medium")
+    status: Mapped[str] = mapped_column(String(32), default="open")  # open|remediated|accepted
+    owner: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    remediation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class TenantBilling(Base):
+    __tablename__ = "tenant_billing"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    plan: Mapped[str] = mapped_column(String(32), default="pilot")  # pilot|growth|enterprise
+    seat_limit: Mapped[int] = mapped_column(Integer, default=25)
+    document_limit: Mapped[int] = mapped_column(Integer, default=10_000)
+    monthly_llm_token_limit: Mapped[int] = mapped_column(Integer, default=1_000_000)
+    status: Mapped[str] = mapped_column(String(32), default="active")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SlaMeasurement(Base):
+    __tablename__ = "sla_measurements"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    uptime_ratio: Mapped[float] = mapped_column(Float, default=1.0)
+    search_p95_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    chat_p95_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    met_commitment: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
