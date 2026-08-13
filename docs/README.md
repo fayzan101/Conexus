@@ -96,6 +96,8 @@ Central index for product, architecture, API, security, and operations documenta
 | [roadmap/phase-6-pr.md](roadmap/phase-6-pr.md) | Phase 6 PR description |
 | [roadmap/phase-7-plan.md](roadmap/phase-7-plan.md) | Phase 7 plan |
 | [roadmap/phase-7-pr.md](roadmap/phase-7-pr.md) | Phase 7 PR description |
+| [roadmap/phase-8-plan.md](roadmap/phase-8-plan.md) | Phase 8 plan |
+| [roadmap/phase-8-pr.md](roadmap/phase-8-pr.md) | Phase 8 PR description |
 
 ---
 
@@ -107,6 +109,7 @@ Central index for product, architecture, API, security, and operations documenta
 | [deployment/environments.md](deployment/environments.md) | Env config & secrets |
 | [operations/monitoring.md](operations/monitoring.md) | Observability |
 | [operations/runbook.md](operations/runbook.md) | Ops runbook outline |
+| [operations/support-playbooks.md](operations/support-playbooks.md) | GA support playbooks |
 
 ---
 

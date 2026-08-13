@@ -9,6 +9,7 @@ from app.api.routes import (
     connectors,
     decisions,
     documents,
+    ga,
     graph,
     health,
     intelligence,
@@ -48,8 +49,8 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="Enterprise Brain API",
-        version="0.1.0",
-        description="AI-Powered Enterprise Memory & Intelligence Platform (MVP)",
+        version="1.0.0",
+        description="AI-Powered Enterprise Memory & Intelligence Platform (GA)",
         lifespan=lifespan if enable_lifespan else None,
     )
     app.add_middleware(
@@ -78,6 +79,7 @@ def create_app(*, enable_lifespan: bool = True) -> FastAPI:
     app.include_router(knowledge.router)
     app.include_router(security.router)
     app.include_router(os_platform.router)
+    app.include_router(ga.router)
     app.include_router(metrics.router)
     return app
 

@@ -133,6 +133,18 @@ class Settings(BaseSettings):
     backup_rpo_hours: float = 24.0
     backup_rto_hours: float = 4.0
 
+    # Phase 8 — GA maturity
+    ga_version: str = "1.0.0"
+    agent_allowlist: str = "search,graph_neighbors,list_predictions,draft_doc"
+    agent_require_hitl_writes: bool = True
+    automation_webhook_url: str = ""
+    eval_min_recall_at_5: float = 0.6
+    eval_min_citation_rate: float = 0.9
+    eval_max_unsafe_action_rate: float = 0.05
+    sla_uptime_target: float = 0.999
+    billing_plan_default: str = "pilot"
+    status_page_public: bool = True
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
@@ -141,6 +153,10 @@ class Settings(BaseSettings):
     def versioned_collection(self) -> str:
         provider = (self.embedding_provider or "hash").replace("/", "_")
         return f"{self.qdrant_collection}_{provider}_{self.embedding_dim}"
+
+    @property
+    def agent_tool_allowlist(self) -> list[str]:
+        return [t.strip() for t in (self.agent_allowlist or "").split(",") if t.strip()]
 
     @model_validator(mode="after")
     def _guard_dev_auth_outside_local(self) -> "Settings":
