@@ -110,15 +110,21 @@ def decode_oidc_token(token: str, settings: Settings) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="Invalid OIDC token") from exc
 
 
-def upsert_oidc_user(db: Session, claims: dict[str, Any], tenant_id: str = "default") -> User:
+def upsert_oidc_user(
+    db: Session,
+    claims: dict[str, Any],
+    tenant_id: str | None = None,
+    settings: Settings | None = None,
+) -> User:
     sub = claims.get("sub")
     email = (claims.get("email") or claims.get("preferred_username") or "").lower()
     if not sub or not email:
         raise HTTPException(status_code=401, detail="OIDC token missing sub/email")
 
-    user = db.query(User).filter(User.idp_subject == sub, User.tenant_id == tenant_id).first()
+    resolved_tenant = tenant_id or (settings.default_tenant_id if settings else "default")
+    user = db.query(User).filter(User.idp_subject == sub, User.tenant_id == resolved_tenant).first()
     if not user:
-        user = get_user_by_email(db, email, tenant_id=tenant_id)
+        user = get_user_by_email(db, email, tenant_id=resolved_tenant)
     if not user:
         user = User(
             email=email,
@@ -127,7 +133,8 @@ def upsert_oidc_user(db: Session, claims: dict[str, Any], tenant_id: str = "defa
             hashed_password=None,
             role=Role.employee,
             is_active=True,
-            tenant_id=tenant_id,
+            tenant_id=resolved_tenant,
+            clearance="internal",
         )
         db.add(user)
     else:
@@ -149,9 +156,20 @@ def get_current_user(
     token = credentials.credentials
 
     if settings.auth_provider == "oidc":
-        # Prefer IdP JWT; fall back to local session tokens issued after OIDC exchange
+        # Prefer IdP JWT (JWKS); fall back to local session tokens issued after OIDC exchange
         try:
-            payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+            claims = decode_oidc_token(token, settings)
+            user = upsert_oidc_user(db, claims, settings=settings)
+            if not user.is_active:
+                raise HTTPException(status_code=401, detail="User inactive")
+            return user
+        except HTTPException as oidc_exc:
+            if oidc_exc.status_code not in {401, 500}:
+                raise
+            try:
+                payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+            except JWTError as exc:
+                raise HTTPException(status_code=401, detail="Invalid OIDC token") from exc
             if payload.get("type") not in {None, "access"}:
                 raise HTTPException(status_code=401, detail="Invalid token type")
             sub = payload.get("sub")
@@ -160,12 +178,6 @@ def get_current_user(
             user = db.get(User, UUID(sub))
             if not user or not user.is_active:
                 raise HTTPException(status_code=401, detail="User inactive or missing")
-            return user
-        except (JWTError, ValueError, HTTPException):
-            claims = decode_oidc_token(token, settings)
-            user = upsert_oidc_user(db, claims)
-            if not user.is_active:
-                raise HTTPException(status_code=401, detail="User inactive")
             return user
 
     try:

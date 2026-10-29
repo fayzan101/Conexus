@@ -5,13 +5,55 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.db.models import QueryLog
+from app.db.models import Document, Project, QueryLog
 from app.services.abac import filter_hits_with_reasons
 from app.services.embeddings import get_embedder
 from app.services.llm import check_faithfulness, stub_synthesize
 from app.services.llm_budget import synthesize_with_budget
 from app.services.observability import record_grounded, start_span
 from app.services.vector import VectorStore
+
+
+def _related_from_hits(db: Session, hits: list[dict], *, tenant_id: str) -> tuple[list[dict], list[dict]]:
+    """Fill related_projects / people_involved from ACL-visible hit metadata + graph-ish doc fields."""
+    project_ids: set[str] = set()
+    people: list[dict] = []
+    seen_people: set[str] = set()
+    for h in hits:
+        src = h.get("source") or {}
+        payload_people = src.get("people") or src.get("authors") or []
+        if isinstance(payload_people, list):
+            for p in payload_people:
+                key = str(p)
+                if key and key not in seen_people:
+                    seen_people.add(key)
+                    people.append({"id": key, "name": key})
+        doc_id = src.get("document_id")
+        if not doc_id:
+            continue
+        try:
+            doc = db.get(Document, UUID(str(doc_id)))
+        except Exception:
+            doc = None
+        if not doc or doc.tenant_id != tenant_id:
+            continue
+        if doc.project_id:
+            project_ids.add(str(doc.project_id))
+        if doc.uploaded_by and str(doc.uploaded_by) not in seen_people:
+            seen_people.add(str(doc.uploaded_by))
+            people.append({"id": str(doc.uploaded_by), "name": str(doc.uploaded_by)})
+
+    related_projects: list[dict] = []
+    for pid in list(project_ids)[:8]:
+        try:
+            proj = db.get(Project, UUID(pid))
+        except Exception:
+            proj = None
+        if proj and proj.tenant_id == tenant_id:
+            related_projects.append({"id": str(proj.id), "name": proj.name})
+        else:
+            related_projects.append({"id": pid, "name": None})
+    return related_projects, people[:8]
 
 
 def filter_hits_by_acl(
@@ -165,6 +207,7 @@ def grounded_answer(
     ]
     avg_score = sum(h["score"] for h in hits) / len(hits)
     record_grounded(bool(sources))
+    related_projects, people_involved = _related_from_hits(db, hits, tenant_id=tenant_id)
 
     return {
         "content": content,
@@ -178,8 +221,8 @@ def grounded_answer(
             for h in hits
             if h["source"].get("document_id")
         ],
-        "related_projects": [],
-        "people_involved": [],
+        "related_projects": related_projects,
+        "people_involved": people_involved,
         "timeline": [],
         "supporting_evidence": [
             {"quote": h["snippet"][:300], "source_id": h["id"]} for h in hits[:3]

@@ -11,6 +11,7 @@ class GraphStore:
             settings.neo4j_uri,
             auth=(settings.neo4j_user, settings.neo4j_password),
         )
+        self.default_tenant = settings.default_tenant_id
 
     def close(self) -> None:
         self.driver.close()
@@ -23,11 +24,15 @@ class GraphStore:
         except Exception:
             return False
 
-    def upsert_node(self, label: str, node_id: str, properties: dict) -> None:
-        props = {**properties, "id": node_id}
-        cypher = f"MERGE (n:{label} {{id: $id}}) SET n += $props RETURN n"
+    def upsert_node(self, label: str, node_id: str, properties: dict, *, tenant_id: str | None = None) -> None:
+        tid = tenant_id or properties.get("tenant_id") or self.default_tenant
+        props = {**properties, "id": node_id, "tenant_id": tid}
+        cypher = (
+            f"MERGE (n:{label} {{id: $id, tenant_id: $tenant_id}}) "
+            "SET n += $props RETURN n"
+        )
         with self.driver.session() as session:
-            session.run(cypher, id=node_id, props=props)
+            session.run(cypher, id=node_id, tenant_id=tid, props=props)
 
     def upsert_edge(
         self,
@@ -36,20 +41,26 @@ class GraphStore:
         to_label: str,
         to_id: str,
         rel_type: str,
+        *,
+        tenant_id: str | None = None,
     ) -> None:
+        tid = tenant_id or self.default_tenant
         cypher = (
-            f"MERGE (a:{from_label} {{id: $from_id}}) "
-            f"MERGE (b:{to_label} {{id: $to_id}}) "
-            f"MERGE (a)-[r:{rel_type}]->(b) RETURN r"
+            f"MERGE (a:{from_label} {{id: $from_id, tenant_id: $tenant_id}}) "
+            f"MERGE (b:{to_label} {{id: $to_id, tenant_id: $tenant_id}}) "
+            f"MERGE (a)-[r:{rel_type}]->(b) SET r.tenant_id = $tenant_id RETURN r"
         )
         with self.driver.session() as session:
-            session.run(cypher, from_id=from_id, to_id=to_id)
+            session.run(cypher, from_id=from_id, to_id=to_id, tenant_id=tid)
 
-    def get_node(self, node_id: str) -> dict | None:
+    def get_node(self, node_id: str, *, tenant_id: str | None = None) -> dict | None:
+        tid = tenant_id or self.default_tenant
         with self.driver.session() as session:
             result = session.run(
-                "MATCH (n {id: $id}) RETURN labels(n) AS labels, properties(n) AS props",
+                "MATCH (n {id: $id, tenant_id: $tenant_id}) "
+                "RETURN labels(n) AS labels, properties(n) AS props",
                 id=node_id,
+                tenant_id=tid,
             )
             record = result.single()
             if not record:
@@ -61,15 +72,18 @@ class GraphStore:
                 "properties": dict(record["props"]),
             }
 
-    def neighbors(self, node_id: str, limit: int = 50) -> list[dict]:
+    def neighbors(self, node_id: str, limit: int = 50, *, tenant_id: str | None = None) -> list[dict]:
+        tid = tenant_id or self.default_tenant
         with self.driver.session() as session:
             result = session.run(
                 """
-                MATCH (n {id: $id})-[r]-(m)
+                MATCH (n {id: $id, tenant_id: $tenant_id})-[r]-(m)
+                WHERE coalesce(m.tenant_id, $tenant_id) = $tenant_id
                 RETURN labels(m) AS labels, properties(m) AS props, type(r) AS rel
                 LIMIT $limit
                 """,
                 id=node_id,
+                tenant_id=tid,
                 limit=limit,
             )
             out = []
@@ -85,27 +99,43 @@ class GraphStore:
                 )
             return out
 
-    def search(self, label: str | None, name: str | None, limit: int = 20) -> list[dict]:
+    def search(
+        self,
+        label: str | None,
+        name: str | None,
+        limit: int = 20,
+        *,
+        tenant_id: str | None = None,
+    ) -> list[dict]:
+        tid = tenant_id or self.default_tenant
         if label and name:
             cypher = (
-                f"MATCH (n:{label}) WHERE toLower(n.name) CONTAINS toLower($name) "
-                "OR toLower(n.title) CONTAINS toLower($name) "
+                f"MATCH (n:{label}) WHERE n.tenant_id = $tenant_id AND ("
+                "toLower(n.name) CONTAINS toLower($name) "
+                "OR toLower(n.title) CONTAINS toLower($name)) "
                 "RETURN labels(n) AS labels, properties(n) AS props LIMIT $limit"
             )
-            params = {"name": name, "limit": limit}
+            params = {"name": name, "limit": limit, "tenant_id": tid}
         elif label:
-            cypher = f"MATCH (n:{label}) RETURN labels(n) AS labels, properties(n) AS props LIMIT $limit"
-            params = {"limit": limit}
+            cypher = (
+                f"MATCH (n:{label}) WHERE n.tenant_id = $tenant_id "
+                "RETURN labels(n) AS labels, properties(n) AS props LIMIT $limit"
+            )
+            params = {"limit": limit, "tenant_id": tid}
         elif name:
             cypher = (
-                "MATCH (n) WHERE toLower(coalesce(n.name, '')) CONTAINS toLower($name) "
-                "OR toLower(coalesce(n.title, '')) CONTAINS toLower($name) "
+                "MATCH (n) WHERE n.tenant_id = $tenant_id AND ("
+                "toLower(coalesce(n.name, '')) CONTAINS toLower($name) "
+                "OR toLower(coalesce(n.title, '')) CONTAINS toLower($name)) "
                 "RETURN labels(n) AS labels, properties(n) AS props LIMIT $limit"
             )
-            params = {"name": name, "limit": limit}
+            params = {"name": name, "limit": limit, "tenant_id": tid}
         else:
-            cypher = "MATCH (n) RETURN labels(n) AS labels, properties(n) AS props LIMIT $limit"
-            params = {"limit": limit}
+            cypher = (
+                "MATCH (n) WHERE n.tenant_id = $tenant_id "
+                "RETURN labels(n) AS labels, properties(n) AS props LIMIT $limit"
+            )
+            params = {"limit": limit, "tenant_id": tid}
 
         with self.driver.session() as session:
             result = session.run(cypher, **params)
@@ -122,16 +152,29 @@ class GraphStore:
                 )
             return out
 
-    def path(self, from_id: str, to_id: str, max_depth: int = 3) -> list[dict]:
+    def path(
+        self,
+        from_id: str,
+        to_id: str,
+        max_depth: int = 3,
+        *,
+        tenant_id: str | None = None,
+    ) -> list[dict]:
+        tid = tenant_id or self.default_tenant
         with self.driver.session() as session:
             result = session.run(
                 """
-                MATCH p = shortestPath((a {id: $from_id})-[*1..%d]-(b {id: $to_id}))
+                MATCH p = shortestPath(
+                  (a {id: $from_id, tenant_id: $tenant_id})-[*1..%d]-
+                  (b {id: $to_id, tenant_id: $tenant_id})
+                )
+                WHERE all(n IN nodes(p) WHERE coalesce(n.tenant_id, $tenant_id) = $tenant_id)
                 RETURN [n IN nodes(p) | {id: n.id, labels: labels(n), props: properties(n)}] AS nodes
                 """
                 % max_depth,
                 from_id=from_id,
                 to_id=to_id,
+                tenant_id=tid,
             )
             record = result.single()
             if not record:
@@ -149,6 +192,11 @@ class GraphStore:
                 )
             return nodes
 
-    def delete_node(self, node_id: str) -> None:
+    def delete_node(self, node_id: str, *, tenant_id: str | None = None) -> None:
+        tid = tenant_id or self.default_tenant
         with self.driver.session() as session:
-            session.run("MATCH (n {id: $id}) DETACH DELETE n", id=node_id)
+            session.run(
+                "MATCH (n {id: $id, tenant_id: $tenant_id}) DETACH DELETE n",
+                id=node_id,
+                tenant_id=tid,
+            )

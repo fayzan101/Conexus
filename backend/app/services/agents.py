@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db.models import AgentApproval, AgentRun, Prediction
+from app.services.graph import GraphStore
+from app.services.rag import semantic_search
 
 WRITE_ACTIONS = {"update_doc_draft", "create_ticket", "notify", "delete_document"}
 
@@ -21,19 +23,82 @@ def tool_is_allowed(settings: Settings, tool: str) -> bool:
     return tool in set(settings.agent_tool_allowlist)
 
 
-def _tool_search(problem: str) -> dict:
-    return {"tool": "search", "hits": [{"title": "Evidence", "snippet": problem[:160], "id": "ev-1"}]}
+def _tool_search(
+    db: Session,
+    settings: Settings,
+    problem: str,
+    *,
+    user_id: UUID | None,
+    tenant_id: str,
+) -> dict:
+    if not user_id:
+        return {"tool": "search", "hits": [], "error": "user_required_for_acl_search"}
+    result = semantic_search(
+        db,
+        settings,
+        query=problem,
+        user_id=user_id,
+        limit=5,
+        tenant_id=tenant_id,
+    )
+    hits = [
+        {
+            "id": h.get("id"),
+            "title": (h.get("source") or {}).get("title"),
+            "snippet": h.get("snippet"),
+            "score": h.get("score"),
+        }
+        for h in result.get("results") or []
+    ]
+    return {
+        "tool": "search",
+        "hits": hits,
+        "acl_summary": result.get("acl_summary"),
+        "blocked": len(result.get("blocked") or []),
+    }
 
 
-def _tool_graph_neighbors() -> dict:
-    return {"tool": "graph_neighbors", "neighbors": [{"id": "person:ops", "label": "Person"}]}
+def _tool_graph_neighbors(settings: Settings, *, tenant_id: str, seed_id: str | None = None) -> dict:
+    store = GraphStore(settings)
+    try:
+        node_id = seed_id or f"tenant:{tenant_id}"
+        neighbors = store.neighbors(node_id, limit=10, tenant_id=tenant_id)
+        if not neighbors:
+            # Fall back to tenant-scoped search for any Person/Project nodes
+            neighbors = store.search("Person", None, limit=5, tenant_id=tenant_id)
+            neighbors += store.search("Project", None, limit=5, tenant_id=tenant_id)
+        return {
+            "tool": "graph_neighbors",
+            "neighbors": [
+                {"id": n.get("id"), "label": n.get("label"), "properties": n.get("properties")}
+                for n in neighbors[:10]
+            ],
+        }
+    except Exception as exc:
+        return {"tool": "graph_neighbors", "neighbors": [], "error": str(exc)}
+    finally:
+        store.close()
 
 
-def _tool_list_predictions(db: Session) -> dict:
-    rows = db.query(Prediction).order_by(Prediction.created_at.desc()).limit(5).all()
+def _tool_list_predictions(db: Session, *, tenant_id: str) -> dict:
+    rows = (
+        db.query(Prediction)
+        .filter(Prediction.tenant_id == tenant_id)
+        .order_by(Prediction.created_at.desc())
+        .limit(5)
+        .all()
+    )
     return {
         "tool": "list_predictions",
-        "items": [{"id": str(r.id), "type": r.prediction_type, "probability": r.probability} for r in rows],
+        "items": [
+            {
+                "id": str(r.id),
+                "type": r.prediction_type,
+                "probability": r.probability,
+                "title": r.title,
+            }
+            for r in rows
+        ],
     }
 
 
@@ -69,11 +134,11 @@ def run_agent(
             used.append({"tool": tool, "error": "not_in_allowlist"})
             continue
         if tool == "search":
-            used.append(_tool_search(problem))
+            used.append(_tool_search(db, settings, problem, user_id=user_id, tenant_id=tenant_id))
         elif tool == "graph_neighbors":
-            used.append(_tool_graph_neighbors())
+            used.append(_tool_graph_neighbors(settings, tenant_id=tenant_id))
         elif tool == "list_predictions":
-            used.append(_tool_list_predictions(db))
+            used.append(_tool_list_predictions(db, tenant_id=tenant_id))
         elif tool == "draft_doc":
             draft = _tool_draft_doc(problem)
             used.append(draft)
@@ -82,7 +147,9 @@ def run_agent(
             else:
                 pending_write = None
         else:
-            used.append({"tool": tool, "error": "unimplemented"})
+            # Fail closed on unknown tools even if somehow allowlisted
+            unsafe = True
+            used.append({"tool": tool, "error": "unknown_tool_fail_closed"})
 
     citations = []
     for step in used:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
@@ -25,19 +25,28 @@ from app.db.models import (
 )
 
 
-def predict_project_delay(db: Session, project: Project) -> Prediction:
-    docs = db.query(Document).filter(Document.project_id == project.id).count()
-    meetings = db.query(Meeting).filter(Meeting.project_id == project.id).count()
+def predict_project_delay(db: Session, project: Project, *, tenant_id: str | None = None) -> Prediction:
+    tid = tenant_id or project.tenant_id or "default"
+    docs = (
+        db.query(Document)
+        .filter(Document.project_id == project.id, Document.tenant_id == tid)
+        .count()
+    )
+    meetings = (
+        db.query(Meeting)
+        .filter(Meeting.project_id == project.id, Meeting.tenant_id == tid)
+        .count()
+    )
     failed_jobs = (
         db.query(IngestJob)
-        .filter(IngestJob.status == JobStatus.failed)
+        .filter(IngestJob.status == JobStatus.failed, IngestJob.tenant_id == tid)
         .count()
     )
     age_proxy = max(1, docs + meetings)
-    # Heuristic: low activity + failed jobs => higher delay risk
     probability = min(0.95, 0.2 + (failed_jobs * 0.15) + (0.4 / age_proxy))
     severity = "high" if probability >= 0.7 else "medium" if probability >= 0.4 else "low"
     pred = Prediction(
+        tenant_id=tid,
         prediction_type="project_delay",
         subject_type="project",
         subject_id=str(project.id),
@@ -53,17 +62,18 @@ def predict_project_delay(db: Session, project: Project) -> Prediction:
     return pred
 
 
-def predict_knowledge_loss(db: Session) -> list[Prediction]:
+def predict_knowledge_loss(db: Session, *, tenant_id: str = "default") -> list[Prediction]:
     created = []
     risky = (
         db.query(KnowledgeScore)
-        .filter(KnowledgeScore.freshness < 0.4)
+        .filter(KnowledgeScore.tenant_id == tenant_id, KnowledgeScore.freshness < 0.4)
         .order_by(KnowledgeScore.risk.desc())
         .limit(20)
         .all()
     )
     for score in risky:
         pred = Prediction(
+            tenant_id=tenant_id,
             prediction_type="knowledge_loss",
             subject_type=score.entity_type,
             subject_id=score.entity_id,
@@ -83,22 +93,21 @@ def predict_knowledge_loss(db: Session) -> list[Prediction]:
     return created
 
 
-def run_predictions(db: Session) -> dict:
-    projects = db.query(Project).limit(50).all()
-    project_preds = [predict_project_delay(db, p) for p in projects]
-    loss_preds = predict_knowledge_loss(db)
+def run_predictions(db: Session, *, tenant_id: str = "default") -> dict:
+    projects = db.query(Project).filter(Project.tenant_id == tenant_id).limit(50).all()
+    project_preds = [predict_project_delay(db, p, tenant_id=tenant_id) for p in projects]
+    loss_preds = predict_knowledge_loss(db, tenant_id=tenant_id)
     return {
         "project_delay": len(project_preds),
         "knowledge_loss": len(loss_preds),
     }
 
 
-def detect_workflow_patterns(db: Session) -> list[WorkflowPattern]:
-    """Detect repetitive query/ingest patterns as automation candidates."""
+def detect_workflow_patterns(db: Session, *, tenant_id: str = "default") -> list[WorkflowPattern]:
     since = datetime.now(timezone.utc) - timedelta(days=30)
     queries = (
         db.query(QueryLog.query_text, func.count(QueryLog.id))
-        .filter(QueryLog.created_at >= since)
+        .filter(QueryLog.tenant_id == tenant_id, QueryLog.created_at >= since)
         .group_by(QueryLog.query_text)
         .having(func.count(QueryLog.id) >= 2)
         .all()
@@ -106,7 +115,11 @@ def detect_workflow_patterns(db: Session) -> list[WorkflowPattern]:
     patterns: list[WorkflowPattern] = []
     for text, count in queries:
         key = f"query:{text.strip().lower()[:80]}"
-        existing = db.query(WorkflowPattern).filter(WorkflowPattern.pattern_key == key).first()
+        existing = (
+            db.query(WorkflowPattern)
+            .filter(WorkflowPattern.tenant_id == tenant_id, WorkflowPattern.pattern_key == key)
+            .first()
+        )
         suggestion = "Create a saved answer or automation for this recurring question."
         if existing:
             existing.occurrences = int(count)
@@ -116,6 +129,7 @@ def detect_workflow_patterns(db: Session) -> list[WorkflowPattern]:
             patterns.append(existing)
         else:
             row = WorkflowPattern(
+                tenant_id=tenant_id,
                 name=f"Recurring query: {text[:60]}",
                 pattern_key=key,
                 occurrences=int(count),
@@ -126,16 +140,24 @@ def detect_workflow_patterns(db: Session) -> list[WorkflowPattern]:
             db.add(row)
             patterns.append(row)
 
-    # Ingest failure loops
-    failed = db.query(IngestJob).filter(IngestJob.status == JobStatus.failed).count()
+    failed = (
+        db.query(IngestJob)
+        .filter(IngestJob.tenant_id == tenant_id, IngestJob.status == JobStatus.failed)
+        .count()
+    )
     if failed >= 2:
         key = "ingest:failures"
-        existing = db.query(WorkflowPattern).filter(WorkflowPattern.pattern_key == key).first()
+        existing = (
+            db.query(WorkflowPattern)
+            .filter(WorkflowPattern.tenant_id == tenant_id, WorkflowPattern.pattern_key == key)
+            .first()
+        )
         if existing:
             existing.occurrences = failed
             patterns.append(existing)
         else:
             row = WorkflowPattern(
+                tenant_id=tenant_id,
                 name="Repeated ingest failures",
                 pattern_key=key,
                 occurrences=failed,
@@ -160,10 +182,12 @@ def upsert_dependency(
     rel_type: str = "depends_on",
     criticality: float = 0.5,
     metadata_json: dict | None = None,
+    tenant_id: str = "default",
 ) -> DependencyEdge:
     existing = (
         db.query(DependencyEdge)
         .filter(
+            DependencyEdge.tenant_id == tenant_id,
             DependencyEdge.from_id == from_id,
             DependencyEdge.to_id == to_id,
             DependencyEdge.rel_type == rel_type,
@@ -177,6 +201,7 @@ def upsert_dependency(
         db.refresh(existing)
         return existing
     edge = DependencyEdge(
+        tenant_id=tenant_id,
         from_type=from_type,
         from_id=from_id,
         to_type=to_type,
@@ -191,14 +216,18 @@ def upsert_dependency(
     return edge
 
 
-def impact_analysis(db: Session, node_id: str, *, depth: int = 2) -> dict:
+def impact_analysis(db: Session, node_id: str, *, depth: int = 2, tenant_id: str = "default") -> dict:
     visited = {node_id}
     frontier = [node_id]
     edges_out = []
     for _ in range(max(1, depth)):
         nxt = []
         for nid in frontier:
-            rows = db.query(DependencyEdge).filter(DependencyEdge.from_id == nid).all()
+            rows = (
+                db.query(DependencyEdge)
+                .filter(DependencyEdge.tenant_id == tenant_id, DependencyEdge.from_id == nid)
+                .all()
+            )
             for e in rows:
                 edges_out.append(
                     {
@@ -219,18 +248,18 @@ def impact_analysis(db: Session, node_id: str, *, depth: int = 2) -> dict:
     return {"root": node_id, "impacted_nodes": sorted(visited - {node_id}), "edges": edges_out}
 
 
-def discover_opportunities(db: Session) -> list[Opportunity]:
+def discover_opportunities(db: Session, *, tenant_id: str = "default") -> list[Opportunity]:
     created: list[Opportunity] = []
-    # Documentation gaps from knowledge scores
     gaps = (
         db.query(KnowledgeScore)
-        .filter(KnowledgeScore.completeness < 0.35)
+        .filter(KnowledgeScore.tenant_id == tenant_id, KnowledgeScore.completeness < 0.35)
         .order_by(KnowledgeScore.completeness.asc())
         .limit(10)
         .all()
     )
     for g in gaps:
         opp = Opportunity(
+            tenant_id=tenant_id,
             category="documentation_gap",
             title=f"Improve {g.entity_type} completeness",
             description=g.suggested_update or "Content appears incomplete.",
@@ -240,11 +269,10 @@ def discover_opportunities(db: Session) -> list[Opportunity]:
         db.add(opp)
         created.append(opp)
 
-    # Repeated complaints / queries as product opportunity signal
     since = datetime.now(timezone.utc) - timedelta(days=30)
     top_queries = (
         db.query(QueryLog.query_text, func.count(QueryLog.id))
-        .filter(QueryLog.created_at >= since)
+        .filter(QueryLog.tenant_id == tenant_id, QueryLog.created_at >= since)
         .group_by(QueryLog.query_text)
         .having(func.count(QueryLog.id) >= 3)
         .limit(5)
@@ -252,8 +280,9 @@ def discover_opportunities(db: Session) -> list[Opportunity]:
     )
     for text, count in top_queries:
         opp = Opportunity(
+            tenant_id=tenant_id,
             category="repeated_demand",
-            title=f"Address recurring question",
+            title="Address recurring question",
             description=text[:300],
             score=min(0.95, 0.4 + count * 0.1),
             evidence=[{"query": text, "count": int(count)}],
@@ -265,17 +294,18 @@ def discover_opportunities(db: Session) -> list[Opportunity]:
     return created
 
 
-def generate_recommendations(db: Session) -> list[Recommendation]:
+def generate_recommendations(db: Session, *, tenant_id: str = "default") -> list[Recommendation]:
     recs: list[Recommendation] = []
     high_preds = (
         db.query(Prediction)
-        .filter(Prediction.probability >= 0.6)
+        .filter(Prediction.tenant_id == tenant_id, Prediction.probability >= 0.6)
         .order_by(Prediction.probability.desc())
         .limit(10)
         .all()
     )
     for p in high_preds:
         rec = Recommendation(
+            tenant_id=tenant_id,
             category="risk_mitigation",
             title=f"Mitigate: {p.title}",
             action=p.rationale or "Investigate and reduce predicted risk.",
@@ -286,9 +316,15 @@ def generate_recommendations(db: Session) -> list[Recommendation]:
         db.add(rec)
         recs.append(rec)
 
-    patterns = db.query(WorkflowPattern).filter(WorkflowPattern.occurrences >= 2).limit(10).all()
+    patterns = (
+        db.query(WorkflowPattern)
+        .filter(WorkflowPattern.tenant_id == tenant_id, WorkflowPattern.occurrences >= 2)
+        .limit(10)
+        .all()
+    )
     for wp in patterns:
         rec = Recommendation(
+            tenant_id=tenant_id,
             category="automation",
             title=f"Automate: {wp.name}",
             action=wp.suggestion or "Automate this recurring workflow.",
@@ -303,14 +339,41 @@ def generate_recommendations(db: Session) -> list[Recommendation]:
     return recs
 
 
-def run_research_agent(db: Session, *, problem: str, user_id=None) -> ResearchReport:
-    """Deterministic multi-step research workflow for MVP Phase 3."""
-    # 1) Collect evidence from docs/meetings/timeline/decisions
+def run_research_agent(db: Session, *, problem: str, user_id=None, tenant_id: str = "default") -> ResearchReport:
     like = f"%{problem.split()[0] if problem.split() else problem}%"
-    docs = db.query(Document).filter(Document.title.ilike(like) | Document.text_preview.ilike(like)).limit(5).all()
-    meetings = db.query(Meeting).filter(Meeting.title.ilike(like) | Meeting.transcript.ilike(like)).limit(5).all()
-    decisions = db.query(Decision).filter(Decision.title.ilike(like) | Decision.context.ilike(like)).limit(5).all()
-    events = db.query(TimelineEvent).filter(TimelineEvent.title.ilike(like)).limit(5).all()
+    docs = (
+        db.query(Document)
+        .filter(
+            Document.tenant_id == tenant_id,
+            Document.title.ilike(like) | Document.text_preview.ilike(like),
+        )
+        .limit(5)
+        .all()
+    )
+    meetings = (
+        db.query(Meeting)
+        .filter(
+            Meeting.tenant_id == tenant_id,
+            Meeting.title.ilike(like) | Meeting.transcript.ilike(like),
+        )
+        .limit(5)
+        .all()
+    )
+    decisions = (
+        db.query(Decision)
+        .filter(
+            Decision.tenant_id == tenant_id,
+            Decision.title.ilike(like) | Decision.context.ilike(like),
+        )
+        .limit(5)
+        .all()
+    )
+    events = (
+        db.query(TimelineEvent)
+        .filter(TimelineEvent.tenant_id == tenant_id, TimelineEvent.title.ilike(like))
+        .limit(5)
+        .all()
+    )
 
     evidence = []
     for d in docs:
@@ -322,11 +385,9 @@ def run_research_agent(db: Session, *, problem: str, user_id=None) -> ResearchRe
     for e in events:
         evidence.append({"type": "timeline", "id": str(e.id), "title": e.title, "snippet": (e.summary or "")[:240]})
 
-    # 2) Detect patterns
     type_counts = Counter(item["type"] for item in evidence)
     patterns = [{"signal": k, "count": v} for k, v in type_counts.most_common()]
 
-    # 3) Root cause heuristic
     if not evidence:
         root = "Insufficient evidence in the knowledge base to determine a root cause."
         recs = ["Ingest related documents, meetings, and decisions, then re-run research."]
@@ -345,6 +406,7 @@ def run_research_agent(db: Session, *, problem: str, user_id=None) -> ResearchRe
         )
 
     report = ResearchReport(
+        tenant_id=tenant_id,
         problem=problem,
         status="completed",
         evidence=evidence,
@@ -360,20 +422,34 @@ def run_research_agent(db: Session, *, problem: str, user_id=None) -> ResearchRe
     return report
 
 
-def executive_kpis(db: Session) -> dict:
-    docs = db.query(func.count(Document.id)).scalar() or 0
-    decisions = db.query(func.count(Decision.id)).scalar() or 0
-    preds = db.query(func.count(Prediction.id)).scalar() or 0
+def executive_kpis(db: Session, *, tenant_id: str = "default") -> dict:
+    docs = db.query(func.count(Document.id)).filter(Document.tenant_id == tenant_id).scalar() or 0
+    decisions = db.query(func.count(Decision.id)).filter(Decision.tenant_id == tenant_id).scalar() or 0
+    preds = db.query(func.count(Prediction.id)).filter(Prediction.tenant_id == tenant_id).scalar() or 0
     high_risk = (
-        db.query(func.count(Prediction.id)).filter(Prediction.severity == "high").scalar() or 0
-    )
-    workflows = db.query(func.count(WorkflowPattern.id)).scalar() or 0
-    opps = db.query(func.count(Opportunity.id)).filter(Opportunity.status == "open").scalar() or 0
-    recs = (
-        db.query(func.count(Recommendation.id)).filter(Recommendation.status == "proposed").scalar()
+        db.query(func.count(Prediction.id))
+        .filter(Prediction.tenant_id == tenant_id, Prediction.severity == "high")
+        .scalar()
         or 0
     )
-    avg_fresh = db.query(func.avg(KnowledgeScore.freshness)).scalar()
+    workflows = (
+        db.query(func.count(WorkflowPattern.id)).filter(WorkflowPattern.tenant_id == tenant_id).scalar() or 0
+    )
+    opps = (
+        db.query(func.count(Opportunity.id))
+        .filter(Opportunity.tenant_id == tenant_id, Opportunity.status == "open")
+        .scalar()
+        or 0
+    )
+    recs = (
+        db.query(func.count(Recommendation.id))
+        .filter(Recommendation.tenant_id == tenant_id, Recommendation.status == "proposed")
+        .scalar()
+        or 0
+    )
+    avg_fresh = (
+        db.query(func.avg(KnowledgeScore.freshness)).filter(KnowledgeScore.tenant_id == tenant_id).scalar()
+    )
     knowledge_health = round(float(avg_fresh or 0.5), 3)
     return {
         "knowledge_health": knowledge_health,
@@ -384,5 +460,5 @@ def executive_kpis(db: Session) -> dict:
         "workflow_automation_candidates": workflows,
         "open_opportunities": opps,
         "open_recommendations": recs,
-        "decision_velocity_proxy": decisions,  # simplified KPI for Phase 3
+        "decision_velocity_proxy": decisions,
     }

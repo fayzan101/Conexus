@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.db.models import Document, ProjectMembership, Role, User
 
 _CLEARANCE_RANK = {
@@ -35,8 +36,10 @@ def evaluate_document_access(
     tenant_id: str | None,
     document: Document | None,
     payload: dict | None = None,
+    settings: Settings | None = None,
 ) -> AccessDecision:
     payload = payload or {}
+    cfg = settings or get_settings()
     if tenant_id and document and document.tenant_id != tenant_id:
         return AccessDecision(False, "tenant_mismatch")
     if tenant_id and payload.get("tenant_id") and payload.get("tenant_id") != tenant_id:
@@ -73,12 +76,13 @@ def evaluate_document_access(
             )
             .first()
         )
-        # If memberships exist for the project, require membership; if none exist, allow org-wide
         any_members = (
             db.query(ProjectMembership).filter(ProjectMembership.project_id == UUID(str(project_id))).first()
         )
-        if any_members and not member:
-            return AccessDecision(False, "project_membership_required")
+        if not member:
+            # Default deny when project-scoped; pilot may open empty projects
+            if any_members or not cfg.project_open_if_empty:
+                return AccessDecision(False, "project_membership_required")
 
     if principals:
         principal_ok = str(user.id) in principals or user.email in principals or user.role == Role.admin

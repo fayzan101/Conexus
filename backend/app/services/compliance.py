@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.config import Settings, get_settings
 from app.db.models import ComplianceControl, PenTestFinding
 
 SOC2_SEED = [
@@ -36,6 +37,7 @@ DPA_TEMPLATE = {
 
 
 def seed_compliance_pack(db: Session) -> list[ComplianceControl]:
+    """Seed controls as partial until hardening evidence flags are set."""
     created = []
     for control_id, title, evidence, owner in SOC2_SEED:
         existing = (
@@ -44,13 +46,16 @@ def seed_compliance_pack(db: Session) -> list[ComplianceControl]:
             .first()
         )
         if existing:
+            # Do not auto-promote to implemented without evidence
+            if existing.status == "implemented" and "evidence:" not in (existing.evidence or ""):
+                existing.status = "partial"
             created.append(existing)
             continue
         row = ComplianceControl(
             framework="soc2",
             control_id=control_id,
             title=title,
-            status="implemented",
+            status="partial",
             evidence=evidence,
             owner=owner,
         )
@@ -67,7 +72,7 @@ def seed_compliance_pack(db: Session) -> list[ComplianceControl]:
             framework="gdpr",
             control_id="DATA_MAP",
             title="Personal data map",
-            status="implemented",
+            status="partial",
             evidence=str(GDPR_DATA_MAP),
             owner="compliance",
         )
@@ -82,11 +87,32 @@ def seed_compliance_pack(db: Session) -> list[ComplianceControl]:
     return created
 
 
-def compliance_pack(db: Session) -> dict:
+def hardening_gates(settings: Settings | None = None) -> dict[str, bool]:
+    cfg = settings or get_settings()
+    return {
+        "trust_hardening_complete": bool(cfg.trust_hardening_complete),
+        "isolation_hardening_complete": bool(cfg.isolation_hardening_complete),
+        "encryption_at_rest_verified": bool(cfg.encryption_at_rest_verified),
+        "require_tls": bool(cfg.require_tls),
+        "non_hash_embeddings": (cfg.embedding_provider or "").lower() != "hash" or not cfg.is_prod_like,
+        "oidc_or_saml": cfg.auth_provider in {"oidc", "saml"} or not cfg.is_prod_like,
+    }
+
+
+def compliance_pack(db: Session, settings: Settings | None = None) -> dict:
+    cfg = settings or get_settings()
     seed_compliance_pack(db)
     controls = db.query(ComplianceControl).order_by(ComplianceControl.framework, ComplianceControl.control_id).all()
     findings = db.query(PenTestFinding).order_by(PenTestFinding.created_at.desc()).all()
     open_findings = [f for f in findings if f.status == "open"]
+    gates = hardening_gates(cfg)
+    gates_ok = all(
+        [
+            gates["trust_hardening_complete"],
+            gates["isolation_hardening_complete"],
+            len(open_findings) == 0,
+        ]
+    )
     return {
         "soc2_controls": [
             {
@@ -119,7 +145,8 @@ def compliance_pack(db: Session) -> dict:
                 for f in findings
             ],
         },
-        "ready_for_ga": len(open_findings) == 0,
+        "hardening_gates": gates,
+        "ready_for_ga": gates_ok and len(open_findings) == 0,
     }
 
 

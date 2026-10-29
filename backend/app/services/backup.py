@@ -171,3 +171,26 @@ def simulate_failover(
 
 def list_chaos(db: Session, *, limit: int = 20) -> list[ChaosTest]:
     return db.query(ChaosTest).order_by(ChaosTest.performed_at.desc()).limit(limit).all()
+
+
+def backup_command_matrix(settings: Settings) -> dict[str, list[str]]:
+    """Documented/invokable backup commands for single-tenant DR (not just drill rows)."""
+    db_url = settings.database_url
+    return {
+        "postgres": [
+            "pg_dump \"$DATABASE_URL\" -Fc -f backups/postgres/$(date +%Y%m%d).dump",
+            f"# DATABASE_URL={db_url.split('@')[-1] if '@' in db_url else '(set locally)'}",
+        ],
+        "qdrant": [
+            "curl -X POST \"$QDRANT_URL/collections/$QDRANT_COLLECTION/snapshots\"",
+            "scripts/backup_all.sh qdrant",
+        ],
+        "neo4j": [
+            "cypher-shell -u $NEO4J_USER -p $NEO4J_PASSWORD 'CALL apoc.export.cypher.all(\"backup.cypher\", {})'",
+            "scripts/backup_all.sh neo4j",
+        ],
+        "object": [
+            "aws --endpoint-url $OBJECT_STORE_ENDPOINT s3 sync s3://$OBJECT_STORE_BUCKET backups/object/",
+            "scripts/backup_all.sh object",
+        ],
+    }

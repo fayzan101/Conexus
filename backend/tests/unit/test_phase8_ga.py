@@ -205,17 +205,18 @@ def test_evals_api(client, auth_headers):
 
 
 def test_compliance_pack_and_pentest_lifecycle(db, test_settings):
-    pack = compliance_pack(db)
+    pack = compliance_pack(db, test_settings)
     assert pack["soc2_controls"]
+    assert all(c["status"] == "partial" for c in pack["soc2_controls"])
     assert pack["gdpr"]["dpa_template"]["version"] == "1.0.0"
     assert pack["ready_for_ga"] is True
 
     finding = upsert_pentest_finding(db, title="Open redirect", severity="high")
-    pack2 = compliance_pack(db)
+    pack2 = compliance_pack(db, test_settings)
     assert pack2["ready_for_ga"] is False
     closed = close_pentest_finding(db, finding.id, status="remediated", remediation="Fixed allowlist")
     assert closed.status == "remediated"
-    assert compliance_pack(db)["ready_for_ga"] is True
+    assert compliance_pack(db, test_settings)["ready_for_ga"] is True
 
 
 def test_compliance_api(client, auth_headers):

@@ -17,19 +17,32 @@ spec:
         app.kubernetes.io/component: worker
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 10001
       containers:
         - name: worker
           image: "{{ .Values.image.registry }}/enterprise-brain-api:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml (.Values.worker.securityContext | default (dict "runAsNonRoot" true "runAsUser" 10001 "allowPrivilegeEscalation" false)) | nindent 12 }}
           command: ["python", "-m", "app.worker"]
           env:
             - name: ENVIRONMENT
               value: {{ .Values.environment | quote }}
             - name: QUEUE_INLINE
               value: "false"
+            - name: QUEUE_BACKEND
+              value: "redis"
             {{- range $k, $v := .Values.env }}
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

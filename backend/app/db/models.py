@@ -205,6 +205,7 @@ class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -275,6 +276,7 @@ class TimelineEvent(Base):
     __tablename__ = "timeline_events"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     event_type: Mapped[str] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(512))
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -290,6 +292,7 @@ class ExpertiseSignal(Base):
     __tablename__ = "expertise_signals"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     person_key: Mapped[str] = mapped_column(String(255), index=True)
     topic: Mapped[str] = mapped_column(String(255), index=True)
     weight: Mapped[float] = mapped_column(Float, default=1.0)
@@ -302,6 +305,7 @@ class KnowledgeScore(Base):
     __tablename__ = "knowledge_scores"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     entity_type: Mapped[str] = mapped_column(String(64), index=True)
     entity_id: Mapped[str] = mapped_column(String(255), index=True)
     freshness: Mapped[float] = mapped_column(Float, default=0.5)
@@ -320,6 +324,7 @@ class Prediction(Base):
     __tablename__ = "predictions"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     prediction_type: Mapped[str] = mapped_column(String(64), index=True)
     subject_type: Mapped[str] = mapped_column(String(64))
     subject_id: Mapped[str] = mapped_column(String(255))
@@ -333,10 +338,12 @@ class Prediction(Base):
 
 class WorkflowPattern(Base):
     __tablename__ = "workflow_patterns"
+    __table_args__ = (UniqueConstraint("tenant_id", "pattern_key"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     name: Mapped[str] = mapped_column(String(255))
-    pattern_key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    pattern_key: Mapped[str] = mapped_column(String(255), index=True)
     occurrences: Mapped[int] = mapped_column(Integer, default=1)
     suggestion: Mapped[str | None] = mapped_column(Text, nullable=True)
     automation_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -348,9 +355,10 @@ class WorkflowPattern(Base):
 
 class DependencyEdge(Base):
     __tablename__ = "dependency_edges"
-    __table_args__ = (UniqueConstraint("from_id", "to_id", "rel_type"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "from_id", "to_id", "rel_type"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     from_type: Mapped[str] = mapped_column(String(64))
     from_id: Mapped[str] = mapped_column(String(255), index=True)
     to_type: Mapped[str] = mapped_column(String(64))
@@ -365,6 +373,7 @@ class Opportunity(Base):
     __tablename__ = "opportunities"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     category: Mapped[str] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(512))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -378,6 +387,7 @@ class Recommendation(Base):
     __tablename__ = "recommendations"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     category: Mapped[str] = mapped_column(String(64), index=True)
     title: Mapped[str] = mapped_column(String(512))
     action: Mapped[str] = mapped_column(Text)
@@ -392,6 +402,7 @@ class ResearchReport(Base):
     __tablename__ = "research_reports"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str] = mapped_column(String(64), default="default", index=True)
     problem: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(32), default="completed")
     evidence: Mapped[list | None] = mapped_column(JSON, nullable=True)
