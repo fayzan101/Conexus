@@ -12,7 +12,7 @@ router = APIRouter(prefix="/v1/chat", tags=["chat"])
 
 @router.post("/sessions", response_model=ChatSessionOut, status_code=status.HTTP_201_CREATED)
 def create_session(db: DbSession, user: CurrentUser):
-    session = ChatSession(user_id=user.id, title="New chat")
+    session = ChatSession(user_id=user.id, tenant_id=user.tenant_id or "default", title="New chat")
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -22,7 +22,11 @@ def create_session(db: DbSession, user: CurrentUser):
 @router.get("/sessions/{session_id}", response_model=list[ChatMessageOut])
 def get_session(session_id: UUID, db: DbSession, user: CurrentUser):
     session = db.get(ChatSession, session_id)
-    if not session or session.user_id != user.id:
+    if (
+        not session
+        or session.user_id != user.id
+        or session.tenant_id != (user.tenant_id or "default")
+    ):
         raise HTTPException(status_code=404, detail="Session not found")
     messages = (
         db.query(ChatMessage)
@@ -57,7 +61,11 @@ def send_message(
     settings: AppSettings,
 ):
     session = db.get(ChatSession, session_id)
-    if not session or session.user_id != user.id:
+    if (
+        not session
+        or session.user_id != user.id
+        or session.tenant_id != (user.tenant_id or "default")
+    ):
         raise HTTPException(status_code=404, detail="Session not found")
 
     user_msg = ChatMessage(session_id=session_id, role="user", content=payload.content)

@@ -2,31 +2,93 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import json
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db.models import ConnectorAccount, Document, DocumentChunk, LegalHold, RetentionPolicy, TenantCryptoKey
 from app.services.audit import write_audit
 
+logger = logging.getLogger(__name__)
 
-def wrap_dek(plaintext_dek: bytes, master_secret: str) -> str:
-    digest = hmac.new(master_secret.encode("utf-8"), plaintext_dek, hashlib.sha256).hexdigest()
-    return f"{plaintext_dek.hex()}:{digest}"
+_WRAP_PREFIX_LOCAL = "aesgcm:"
+_WRAP_PREFIX_VAULT = "vault-transit:"
+_LEGACY_XOR_NOTE = "legacy-xor-blobs-require-reconnect"
 
 
-def unwrap_dek(wrapped: str, master_secret: str) -> bytes:
-    hex_part, digest = wrapped.split(":", 1)
-    raw = bytes.fromhex(hex_part)
-    expected = hmac.new(master_secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, digest):
-        raise ValueError("DEK integrity check failed")
-    return raw
+def _master_key_bytes(settings: Settings) -> bytes:
+    raw = (settings.kms_master_key or settings.secret_key or "").encode("utf-8")
+    return hashlib.sha256(raw).digest()
+
+
+def _vault_master(settings: Settings) -> bytes:
+    token = settings.vault_token or settings.kms_master_key or settings.secret_key
+    return hashlib.sha256(token.encode("utf-8")).digest()
+
+
+def wrap_dek(plaintext_dek: bytes, master_secret: str | bytes) -> str:
+    """AES-256-GCM wrap DEK. Returns aesgcm:<b64(nonce||ciphertext||tag)>."""
+    if isinstance(master_secret, str):
+        key = hashlib.sha256(master_secret.encode("utf-8")).digest()
+    else:
+        key = master_secret if len(master_secret) == 32 else hashlib.sha256(master_secret).digest()
+    nonce = secrets.token_bytes(12)
+    ct = AESGCM(key).encrypt(nonce, plaintext_dek, b"eb-dek-v1")
+    return _WRAP_PREFIX_LOCAL + base64.urlsafe_b64encode(nonce + ct).decode("ascii")
+
+
+def unwrap_dek(wrapped: str, master_secret: str | bytes) -> bytes:
+    if isinstance(master_secret, str):
+        key = hashlib.sha256(master_secret.encode("utf-8")).digest()
+    else:
+        key = master_secret if len(master_secret) == 32 else hashlib.sha256(master_secret).digest()
+
+    if wrapped.startswith(_WRAP_PREFIX_VAULT):
+        payload = wrapped[len(_WRAP_PREFIX_VAULT) :]
+        # Local stand-in for Vault Transit: same AES-GCM, separate key material namespace
+        return unwrap_dek(_WRAP_PREFIX_LOCAL + payload, key)
+
+    if wrapped.startswith(_WRAP_PREFIX_LOCAL):
+        raw = base64.urlsafe_b64decode(wrapped[len(_WRAP_PREFIX_LOCAL) :].encode("ascii"))
+        nonce, ct = raw[:12], raw[12:]
+        return AESGCM(key).decrypt(nonce, ct, b"eb-dek-v1")
+
+    # Legacy HMAC hex wrap (pre-hardening): plaintext DEK + digest — reject in favor of rotation
+    if ":" in wrapped and not wrapped.startswith("vault:"):
+        hex_part, digest = wrapped.split(":", 1)
+        try:
+            raw = bytes.fromhex(hex_part)
+        except ValueError as exc:
+            raise ValueError("Unsupported DEK wrap format") from exc
+        import hmac as _hmac
+
+        expected = _hmac.new(
+            master_secret.encode("utf-8") if isinstance(master_secret, str) else master_secret,
+            raw,
+            hashlib.sha256,
+        ).hexdigest()
+        if not _hmac.compare_digest(expected, digest):
+            raise ValueError("DEK integrity check failed")
+        return raw
+
+    if wrapped.startswith("vault:"):
+        return unwrap_dek(wrapped.replace("vault:", "", 1), master_secret)
+
+    raise ValueError("Unsupported DEK wrap format")
+
+
+def _resolve_wrap_secret(settings: Settings, wrapped: str) -> bytes:
+    if wrapped.startswith(_WRAP_PREFIX_VAULT) or (
+        settings.kms_backend == "vault" and settings.vault_token
+    ):
+        return _vault_master(settings)
+    return _master_key_bytes(settings)
 
 
 def ensure_tenant_key(db: Session, settings: Settings, tenant_id: str) -> TenantCryptoKey:
@@ -34,11 +96,12 @@ def ensure_tenant_key(db: Session, settings: Settings, tenant_id: str) -> Tenant
     if existing:
         return existing
     dek = secrets.token_bytes(32)
-    if settings.kms_backend == "vault" and settings.vault_addr and settings.vault_token:
-        # Vault-shaped placeholder: store HMAC-wrapped DEK labeled vault
-        wrapped = "vault:" + wrap_dek(dek, settings.vault_token or settings.secret_key)
+    if settings.kms_backend == "vault" and settings.vault_token:
+        # Vault Transit-shaped: AES-GCM under vault token-derived key (adapter; swap for HTTP Transit later)
+        inner = wrap_dek(dek, _vault_master(settings)).removeprefix(_WRAP_PREFIX_LOCAL)
+        wrapped = _WRAP_PREFIX_VAULT + inner
     else:
-        wrapped = wrap_dek(dek, settings.secret_key)
+        wrapped = wrap_dek(dek, _master_key_bytes(settings))
     row = TenantCryptoKey(tenant_id=tenant_id, wrapped_dek=wrapped, algorithm="aes-256-gcm")
     db.add(row)
     db.commit()
@@ -49,7 +112,12 @@ def ensure_tenant_key(db: Session, settings: Settings, tenant_id: str) -> Tenant
 def rotate_tenant_key(db: Session, settings: Settings, tenant_id: str) -> TenantCryptoKey:
     row = ensure_tenant_key(db, settings, tenant_id)
     dek = secrets.token_bytes(32)
-    row.wrapped_dek = wrap_dek(dek, settings.secret_key)
+    if settings.kms_backend == "vault" and settings.vault_token:
+        inner = wrap_dek(dek, _vault_master(settings)).removeprefix(_WRAP_PREFIX_LOCAL)
+        row.wrapped_dek = _WRAP_PREFIX_VAULT + inner
+    else:
+        row.wrapped_dek = wrap_dek(dek, _master_key_bytes(settings))
+    row.algorithm = "aes-256-gcm"
     row.rotated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
@@ -57,19 +125,25 @@ def rotate_tenant_key(db: Session, settings: Settings, tenant_id: str) -> Tenant
 
 
 def encrypt_credentials(settings: Settings, tenant_id: str, credentials: dict, wrapped_dek: str) -> str:
-    dek = unwrap_dek(wrapped_dek.replace("vault:", ""), settings.secret_key if "vault:" not in wrapped_dek else (settings.vault_token or settings.secret_key))
-    payload = json.dumps(credentials).encode("utf-8")
-    # Simple XOR stream for local/dev envelope (not a substitute for AES-GCM in prod KMS)
-    keystream = hashlib.sha256(dek + tenant_id.encode()).digest()
-    out = bytes(b ^ keystream[i % len(keystream)] for i, b in enumerate(payload))
-    return base64.urlsafe_b64encode(out).decode("ascii")
+    dek = unwrap_dek(wrapped_dek, _resolve_wrap_secret(settings, wrapped_dek))
+    payload = json.dumps(credentials, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    nonce = secrets.token_bytes(12)
+    aad = f"tenant:{tenant_id}".encode("utf-8")
+    ct = AESGCM(dek).encrypt(nonce, payload, aad)
+    return base64.urlsafe_b64encode(nonce + ct).decode("ascii")
 
 
 def decrypt_credentials(settings: Settings, tenant_id: str, blob: str, wrapped_dek: str) -> dict:
-    dek = unwrap_dek(wrapped_dek.replace("vault:", ""), settings.secret_key if "vault:" not in wrapped_dek else (settings.vault_token or settings.secret_key))
+    dek = unwrap_dek(wrapped_dek, _resolve_wrap_secret(settings, wrapped_dek))
     raw = base64.urlsafe_b64decode(blob.encode("ascii"))
-    keystream = hashlib.sha256(dek + tenant_id.encode()).digest()
-    payload = bytes(b ^ keystream[i % len(keystream)] for i, b in enumerate(raw))
+    if len(raw) < 13:
+        raise ValueError("ciphertext too short")
+    nonce, ct = raw[:12], raw[12:]
+    aad = f"tenant:{tenant_id}".encode("utf-8")
+    try:
+        payload = AESGCM(dek).decrypt(nonce, ct, aad)
+    except Exception as exc:
+        raise ValueError("credential decrypt failed") from exc
     return json.loads(payload.decode("utf-8"))
 
 
@@ -78,9 +152,11 @@ def security_posture(settings: Settings) -> dict:
         "require_tls": settings.require_tls,
         "encryption_at_rest_verified": settings.encryption_at_rest_verified,
         "kms_backend": settings.kms_backend,
+        "crypto_algorithm": "aes-256-gcm",
         "llm_mode": settings.llm_mode,
         "llm_no_train": settings.llm_no_train,
         "auth_provider": settings.auth_provider,
+        "legacy_note": _LEGACY_XOR_NOTE,
     }
 
 
@@ -148,7 +224,7 @@ def dsr_delete_user_data(
                     vector_store.delete(point_id=chunk.vector_id)
                     removed["vectors"] += 1
                 except Exception:
-                    pass
+                    logger.exception("vector delete failed for chunk %s", chunk.id)
             db.delete(chunk)
             removed["chunks"] += 1
         if object_storage and doc.object_key:
@@ -156,13 +232,19 @@ def dsr_delete_user_data(
                 object_storage.delete(doc.object_key)
                 removed["objects"] += 1
             except Exception:
-                pass
+                logger.exception("object delete failed for %s", doc.object_key)
         if graph:
             try:
-                graph.delete_node(str(doc.id))
+                graph.delete_node(str(doc.id), tenant_id=tenant_id)
                 removed["graph"] += 1
+            except TypeError:
+                try:
+                    graph.delete_node(str(doc.id))
+                    removed["graph"] += 1
+                except Exception:
+                    logger.exception("graph delete failed for %s", doc.id)
             except Exception:
-                pass
+                logger.exception("graph delete failed for %s", doc.id)
         db.delete(doc)
         removed["documents"] += 1
     db.commit()
@@ -185,8 +267,17 @@ def rotate_connector_tokens(db: Session, settings: Settings, *, tenant_id: str) 
         creds = account.credentials or {}
         if not creds:
             continue
-        # Re-encrypt marker for rotation audit trail
-        blob = encrypt_credentials(settings, tenant_id, creds, key.wrapped_dek)
+        # If already envelope-encrypted, re-wrap plaintext when nested under encrypted key
+        if "encrypted" in creds and len(creds) == 1 or (set(creds.keys()) <= {"encrypted", "rotated_at"}):
+            try:
+                plain = decrypt_credentials(settings, tenant_id, creds["encrypted"], key.wrapped_dek)
+            except Exception:
+                plain = {k: v for k, v in creds.items() if k not in {"encrypted", "rotated_at"}}
+                if not plain:
+                    continue
+        else:
+            plain = {k: v for k, v in creds.items() if k not in {"encrypted", "rotated_at"}}
+        blob = encrypt_credentials(settings, tenant_id, plain, key.wrapped_dek)
         account.credentials = {"encrypted": blob, "rotated_at": datetime.now(timezone.utc).isoformat()}
         rotated += 1
     db.commit()

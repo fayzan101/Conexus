@@ -21,10 +21,15 @@ spec:
         prometheus.io/port: "{{ .Values.api.port }}"
         prometheus.io/path: /metrics
     spec:
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 10001
       containers:
         - name: api
           image: "{{ .Values.image.registry }}/enterprise-brain-api:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml (.Values.api.securityContext | default (dict "runAsNonRoot" true "runAsUser" 10001 "allowPrivilegeEscalation" false)) | nindent 12 }}
           ports:
             - containerPort: {{ .Values.api.port }}
           env:
@@ -38,6 +43,9 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.api.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           livenessProbe:
             httpGet:
               path: /livez
@@ -50,3 +58,6 @@ spec:
               port: {{ .Values.api.port }}
             initialDelaySeconds: 15
             periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -315,8 +315,8 @@ def evals_run(payload: EvalRunIn, db: DbSession, settings: AppSettings, _admin: 
 
 
 @router.get("/v1/compliance/pack")
-def compliance_get(db: DbSession, _admin: GaAdmin):
-    return compliance_pack(db)
+def compliance_get(db: DbSession, settings: AppSettings, _admin: GaAdmin):
+    return compliance_pack(db, settings)
 
 
 @router.post("/v1/compliance/pentest")

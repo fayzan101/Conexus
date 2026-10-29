@@ -75,8 +75,44 @@ class OpenAIEmbedder:
             return out
 
 
+class SentenceTransformersEmbedder:
+    """Local sentence-transformers adapter (lazy import). Falls back to hash if unavailable."""
+
+    def __init__(self, settings: Settings):
+        self.settings = settings
+        self.dim = settings.embedding_dim
+        self._model = None
+
+    def _load(self):
+        if self._model is not None:
+            return self._model
+        try:
+            from sentence_transformers import SentenceTransformer  # type: ignore
+
+            self._model = SentenceTransformer(self.settings.embedding_model or "all-MiniLM-L6-v2")
+        except Exception:
+            self._model = False
+        return self._model
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        model = self._load()
+        if not model:
+            return HashEmbedder(dim=self.dim).embed(texts)
+        vectors = model.encode(texts, normalize_embeddings=True).tolist()
+        out: list[list[float]] = []
+        for vec in vectors:
+            if len(vec) > self.dim:
+                vec = vec[: self.dim]
+            elif len(vec) < self.dim:
+                vec = vec + [0.0] * (self.dim - len(vec))
+            out.append(vec)
+        return out
+
+
 def get_embedder(settings: Settings) -> Embedder:
     provider = (settings.embedding_provider or "hash").lower()
     if provider in {"openai", "azure", "managed"}:
         return OpenAIEmbedder(settings)
+    if provider in {"sentence-transformers", "sentence_transformers", "st", "local"}:
+        return SentenceTransformersEmbedder(settings)
     return HashEmbedder(dim=settings.embedding_dim)

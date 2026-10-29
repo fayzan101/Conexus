@@ -17,11 +17,12 @@
 | RBAC | Role-based access control (MVP) |
 | ABAC | Attribute-based policies (Phase 2+) |
 | Encryption in transit | TLS 1.2+ |
-| Encryption at rest | Disk/object store & DB encryption |
+| Encryption at rest | Disk/object store & DB encryption; connector DEKs via AES-256-GCM envelope (`KMS_BACKEND=local\|vault`) |
 | Audit logs | Auth, admin, search/chat access (configurable) |
 | Private deployment | Single-tenant, VPC, on-prem, air-gapped options |
-| SSO | OAuth / OIDC; SAML for enterprise |
-| Secrets management | Vault / cloud secret manager; no secrets in git |
+| SSO | Production path = OIDC (JWKS); SAML requires signature / forbids `SAML_PILOT_UNSIGNED` in prod |
+| Secrets management | Vault / cloud secret manager; prod boot refuses demo `SECRET_KEY` |
+| Prod profile | Forces Redis queue, real embeddings (not hash), `REQUIRE_TLS`, short-lived access tokens |
 | Data retention | Configurable retention & deletion |
 | Compliance support | SOC2/GDPR-oriented controls (process + product) |
 

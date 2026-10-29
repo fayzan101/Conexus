@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
-import secrets
 from collections import deque
 from typing import Any, Protocol
 
@@ -105,24 +102,7 @@ def event_bus_metrics() -> dict[str, int]:
     return dict(_metrics)
 
 
-def wrap_dek(plaintext_dek: bytes, master_secret: str) -> str:
-    digest = hmac.new(master_secret.encode("utf-8"), plaintext_dek, hashlib.sha256).hexdigest()
-    return f"{plaintext_dek.hex()}:{digest}"
-
-
 def ensure_tenant_key(db, settings: Settings, tenant_id: str):
-    from app.db.models import TenantCryptoKey
+    from app.services.security import ensure_tenant_key as _ensure
 
-    existing = db.query(TenantCryptoKey).filter(TenantCryptoKey.tenant_id == tenant_id).first()
-    if existing:
-        return existing
-    dek = secrets.token_bytes(32)
-    row = TenantCryptoKey(
-        tenant_id=tenant_id,
-        wrapped_dek=wrap_dek(dek, settings.secret_key),
-        algorithm="aes-256-gcm",
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return row
+    return _ensure(db, settings, tenant_id)

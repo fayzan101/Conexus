@@ -16,8 +16,12 @@ class Settings(BaseSettings):
     log_level: str = "info"
     environment: str = "local"
     secret_key: str = "dev-secret-change-me-in-production"
+    kms_master_key: str = ""  # optional dedicated master; falls back to secret_key
     cors_origins: str = "http://localhost:3000"
+    cors_allow_credentials: bool = True
     default_tenant_id: str = "default"
+    demo_secret_key: str = "dev-secret-change-me-in-production"
+    project_open_if_empty: bool = False  # ABAC: deny project-scoped when no memberships unless true
 
     database_url: str = "postgresql+psycopg://eb:eb@localhost:5432/enterprise_brain"
 
@@ -29,8 +33,8 @@ class Settings(BaseSettings):
     qdrant_collection: str = "eb_chunks"
 
     redis_url: str = "redis://localhost:6379/0"
-    queue_backend: str = "memory"
-    queue_inline: bool = True
+    queue_backend: str = "memory"  # prod profile forces redis
+    queue_inline: bool = True  # prod profile forces false
     worker_poll_seconds: float = 1.0
     connector_auto_ingest: bool = True
     event_bus_backend: str = "memory"
@@ -59,6 +63,7 @@ class Settings(BaseSettings):
     saml_idp_entity_id: str = ""
     saml_idp_sso_url: str = ""
     saml_idp_x509_cert: str = ""
+    saml_pilot_unsigned: bool = False  # forbidden in staging/production
     scim_bearer_token: str = ""
     kms_backend: str = "local"  # local | vault
     vault_addr: str = ""
@@ -66,6 +71,8 @@ class Settings(BaseSettings):
     retention_days_default: int = 365
     require_tls: bool = False
     encryption_at_rest_verified: bool = False
+    trust_hardening_complete: bool = False  # set true after P0 verified in env
+    isolation_hardening_complete: bool = False
     dev_admin_email: str = "admin@enterprisebrain.local"
     dev_admin_password: str = "admin123"
     dev_user_email: str = "user@enterprisebrain.local"
@@ -158,14 +165,46 @@ class Settings(BaseSettings):
     def agent_tool_allowlist(self) -> list[str]:
         return [t.strip() for t in (self.agent_allowlist or "").split(",") if t.strip()]
 
+    @property
+    def is_prod_like(self) -> bool:
+        return (self.environment or "local").lower() in {"prod", "production", "staging"}
+
     @model_validator(mode="after")
     def _guard_dev_auth_outside_local(self) -> "Settings":
         env = (self.environment or "local").lower()
+        prod_like = env in {"prod", "production", "staging"}
+
         if self.auth_provider == "dev" and env not in {"local", "test", "development"}:
             raise ValueError(
                 "AUTH_PROVIDER=dev is only allowed when ENVIRONMENT is local|test|development. "
                 "Use AUTH_PROVIDER=oidc or saml for staging/production."
             )
+        if self.saml_pilot_unsigned and prod_like:
+            raise ValueError("SAML_PILOT_UNSIGNED cannot be true in staging/production.")
+        if prod_like and self.secret_key == self.demo_secret_key:
+            raise ValueError("SECRET_KEY must not be the demo default in staging/production.")
+        if prod_like and not self.require_tls:
+            raise ValueError("REQUIRE_TLS=true is required in staging/production.")
+        if prod_like:
+            # Real RAG defaults for production profile
+            if not self.require_llm_key:
+                object.__setattr__(self, "require_llm_key", True)
+            if (self.embedding_provider or "").lower() == "hash":
+                raise ValueError(
+                    "EMBEDDING_PROVIDER=hash is forbidden in staging/production. "
+                    "Use openai or sentence-transformers."
+                )
+            if self.queue_backend == "memory":
+                object.__setattr__(self, "queue_backend", "redis")
+            if self.queue_inline:
+                object.__setattr__(self, "queue_inline", False)
+            if self.auth_provider == "oidc" and (not self.auth_issuer or not self.auth_audience):
+                raise ValueError("AUTH_ISSUER and AUTH_AUDIENCE are required for OIDC in staging/production.")
+            if self.auth_provider == "saml" and not self.saml_idp_x509_cert and not self.saml_pilot_unsigned:
+                raise ValueError("SAML_IDP_X509_CERT required for SAML in staging/production.")
+            if self.access_token_expire_minutes > 60:
+                object.__setattr__(self, "access_token_expire_minutes", 60)
+
         if self.require_llm_key and not self.llm_api_key and env not in {"local", "test"}:
             raise ValueError("LLM_API_KEY is required when REQUIRE_LLM_KEY=true outside local/test.")
         mode = (self.llm_mode or "public").lower()

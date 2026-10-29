@@ -62,7 +62,7 @@ def ga_readiness(db: Session, settings: Settings) -> dict:
     from app.services.compliance import compliance_pack
     from app.services.eval_gates import run_all_eval_gates
 
-    pack = compliance_pack(db)
+    pack = compliance_pack(db, settings)
     gates = run_all_eval_gates(db, settings)
     return {
         "ga_version": settings.ga_version,
@@ -72,4 +72,5 @@ def ga_readiness(db: Session, settings: Settings) -> dict:
         "sso_abac_private_llm": True,
         "ready": pack["ready_for_ga"] and gates["all_passed"],
         "gates": gates,
+        "hardening_gates": pack.get("hardening_gates"),
     }

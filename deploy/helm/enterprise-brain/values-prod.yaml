@@ -1,5 +1,5 @@
 environment: prod
-deployMode: saas
+deployMode: single_tenant
 api:
   replicaCount: 3
   hpa:
@@ -7,6 +7,11 @@ api:
     maxReplicas: 12
   pdb:
     minAvailable: 2
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
 worker:
   replicaCount: 3
   hpa:
@@ -14,6 +19,11 @@ worker:
     maxReplicas: 16
   pdb:
     minAvailable: 2
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
 web:
   replicaCount: 3
   pdb:
@@ -24,3 +34,14 @@ env:
   AUTH_PROVIDER: oidc
   REQUIRE_TLS: "true"
   ENCRYPTION_AT_REST_VERIFIED: "true"
+  QUEUE_BACKEND: redis
+  QUEUE_INLINE: "false"
+  EMBEDDING_PROVIDER: openai
+  REQUIRE_LLM_KEY: "true"
+  SAML_PILOT_UNSIGNED: "false"
+  PROJECT_OPEN_IF_EMPTY: "false"
+  TRUST_HARDENING_COMPLETE: "true"
+  ISOLATION_HARDENING_COMPLETE: "true"
+  OTEL_ENABLED: "true"
+  PROMETHEUS_ENABLED: "true"
+  ACCESS_TOKEN_EXPIRE_MINUTES: "60"
